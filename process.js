@@ -1,4 +1,5 @@
 import { filesystem } from './filesystem.js'
+import { ipc } from './ipc.js'
 import { memory } from './memory.js'
 
 const processes = []
@@ -13,16 +14,22 @@ const spawn = path => {
 
     const newProcess = {
         pid: nextPID++,
+        state: 'ready',
+
         programStart,
         programSize: program.length,
+
         dataStart: data.start,
         dataSize: data.size,
+
         instructionPointer: 0,
+
         registers: [0, 0, 0, 0],
         zeroFlag: false,
     }
 
     processes.push(newProcess)
+    ipc.register(newProcess)
 
     return newProcess
 }
@@ -35,7 +42,10 @@ const exit = currentProcess => {
 
     memory.freeData(currentProcess.dataStart)
 
+    ipc.unregister(currentProcess.pid)
+
     const index = processes.indexOf(currentProcess)
+
     processes.splice(index, 1)
 }
 

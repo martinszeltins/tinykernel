@@ -3,11 +3,12 @@ import { process } from './process.js'
 
 const TIME_SLICE = 56
 
-/**
- * Simple round-robin scheduler.
- */
 const run = () => {
     for (const currentProcess of [...process.processes]) {
+        if (currentProcess.state !== 'ready') {
+            continue
+        }
+
         const hasExited = cpu.run(
             currentProcess,
             TIME_SLICE

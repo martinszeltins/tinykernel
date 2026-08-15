@@ -1,5 +1,5 @@
 import { FRAMEBUFFER_ADDRESS, FRAMEBUFFER_HEIGHT, FRAMEBUFFER_WIDTH, KEYBOARD_ADDRESS } from './memory.js'
-import { ADD, assemble, CMP, JE, JMP, JNE, LABEL, LOAD, LOAD16, LOAD16_AT, LOAD_AT, MOD, MOV, NOP, R0, R1, R2, R3, STORE, STORE16, STORE16_AT, STORE_AT, SUB, SYSCALL } from './asm.js'
+import { ADD, assemble, CMP, HALT, JE, JMP, JNE, LABEL, LOAD, LOAD16, LOAD16_AT, LOAD_AT, MOD, MOV, NOP, R0, R1, R2, R3, STORE, STORE16, STORE16_AT, STORE_AT, SUB, SYSCALL } from './asm.js'
 import { keyboardCode } from './keyboard.js'
 import { syscallNumber } from './syscall.js'
 
@@ -47,11 +47,6 @@ const addAnimationStep = (oldPosition, newPosition) => {
         STORE(R1, animationStartAddress + newPosition)
     )
 
-    /*
-        Scheduler now gives 56 instructions.
-
-        Keep /bin/animate at roughly its old speed.
-    */
     for (let i = 0; i < 54; i++) {
         animationInstructions.push(NOP())
     }
@@ -75,23 +70,6 @@ const animationProgram = assemble(...animationInstructions)
 
 /*
     /games/snake
-
-    Snake owns rows 5–24.
-
-    20 rows × 80 columns = 1600 cells.
-
-    Private Snake memory:
-
-    0–1     head cell
-    2–3     tail ring-buffer index
-    4–5     head ring-buffer index
-    6–7     length
-    8–9     food cell
-    10      direction
-
-    32+     body ring buffer
-
-    Every body entry is a 16-bit cell number.
 */
 
 const SNAKE_TOP_ROW = 5
@@ -111,9 +89,7 @@ const BODY_START = 32
 
 const snakeProgram = assemble(
     /*
-        Initial snake:
-
-        #####
+        Initial snake.
     */
 
     MOV(R0, 35),
@@ -125,9 +101,7 @@ const snakeProgram = assemble(
     STORE(R0, snakeScreenStart + 4),
 
     /*
-        Body ring buffer:
-
-        [0, 1, 2, 3, 4]
+        Body ring buffer.
     */
 
     MOV(R0, 0),
@@ -174,16 +148,6 @@ const snakeProgram = assemble(
 
     LABEL('snake_loop'),
 
-    /*
-        Read the memory-mapped keyboard register.
-
-        0 = no key
-        1 = up
-        2 = right
-        3 = down
-        4 = left
-    */
-
     LOAD(R0, KEYBOARD_ADDRESS),
 
     MOV(R1, keyboardCode.NONE),
@@ -192,8 +156,6 @@ const snakeProgram = assemble(
 
     /*
         UP
-
-        Ignore an immediate reversal from DOWN.
     */
 
     MOV(R1, keyboardCode.UP),
@@ -290,13 +252,6 @@ const snakeProgram = assemble(
 
     JMP('snake_move_left'),
 
-    /*
-        UP
-
-        Adding GAME_SIZE - WIDTH and then modulo
-        GAME_SIZE wraps from the top to the bottom.
-    */
-
     LABEL('snake_move_up'),
 
     MOV(R1, SNAKE_GAME_SIZE - FRAMEBUFFER_WIDTH),
@@ -306,10 +261,6 @@ const snakeProgram = assemble(
     MOD(R0, R1),
 
     JMP('snake_head_ready'),
-
-    /*
-        DOWN
-    */
 
     LABEL('snake_move_down'),
 
@@ -321,15 +272,7 @@ const snakeProgram = assemble(
 
     JMP('snake_head_ready'),
 
-    /*
-        RIGHT
-    */
-
     LABEL('snake_move_right'),
-
-    /*
-        R2 = current column
-    */
 
     MOV(R2, 0),
     ADD(R2, R0),
@@ -337,17 +280,8 @@ const snakeProgram = assemble(
     MOV(R3, FRAMEBUFFER_WIDTH),
     MOD(R2, R3),
 
-    /*
-        Normally head++.
-    */
-
     MOV(R3, 1),
     ADD(R0, R3),
-
-    /*
-        If we were at column 79, subtract 80 so
-        we wrap to column 0 of the same row.
-    */
 
     MOV(R3, FRAMEBUFFER_WIDTH - 1),
     CMP(R2, R3),
@@ -358,10 +292,6 @@ const snakeProgram = assemble(
 
     JMP('snake_head_ready'),
 
-    /*
-        LEFT
-    */
-
     LABEL('snake_move_left'),
 
     MOV(R2, 0),
@@ -370,17 +300,8 @@ const snakeProgram = assemble(
     MOV(R3, FRAMEBUFFER_WIDTH),
     MOD(R2, R3),
 
-    /*
-        Normally head--.
-    */
-
     MOV(R3, 1),
     SUB(R0, R3),
-
-    /*
-        If we were at column 0, add 80 so we wrap
-        to column 79 of the same row.
-    */
 
     MOV(R3, 0),
     CMP(R2, R3),
@@ -399,13 +320,6 @@ const snakeProgram = assemble(
 
     STORE16(R0, HEAD),
 
-    /*
-        Advance head ring-buffer index.
-
-        headIndex =
-            (headIndex + 1) % GAME_SIZE
-    */
-
     LOAD16(R1, HEAD_INDEX),
 
     MOV(R2, 1),
@@ -417,12 +331,7 @@ const snakeProgram = assemble(
     STORE16(R1, HEAD_INDEX),
 
     /*
-        Calculate:
-
-            BODY_START + headIndex * 2
-
-        R2 becomes the address of the new
-        ring-buffer entry.
+        BODY_START + headIndex * 2
     */
 
     MOV(R2, 0),
@@ -432,14 +341,10 @@ const snakeProgram = assemble(
     MOV(R3, BODY_START),
     ADD(R2, R3),
 
-    /*
-        Store the new head cell into the body array.
-    */
-
     STORE16_AT(R0, R2),
 
     /*
-        Draw the new head.
+        Draw head.
     */
 
     MOV(R1, snakeScreenStart),
@@ -449,7 +354,7 @@ const snakeProgram = assemble(
     STORE_AT(R2, R1),
 
     /*
-        Did we eat the food?
+        Food?
     */
 
     LOAD16(R1, FOOD),
@@ -459,17 +364,10 @@ const snakeProgram = assemble(
     /*
         ========================================
         NORMAL MOVEMENT
-
-        Remove old tail.
         ========================================
     */
 
     LOAD16(R1, TAIL_INDEX),
-
-    /*
-        R2 =
-            BODY_START + tailIndex * 2
-    */
 
     MOV(R2, 0),
     ADD(R2, R1),
@@ -478,14 +376,10 @@ const snakeProgram = assemble(
     MOV(R3, BODY_START),
     ADD(R2, R3),
 
-    /*
-        R0 = old tail cell
-    */
-
     LOAD16_AT(R0, R2),
 
     /*
-        Erase tail from framebuffer.
+        Erase tail.
     */
 
     MOV(R1, snakeScreenStart),
@@ -495,7 +389,7 @@ const snakeProgram = assemble(
     STORE_AT(R2, R1),
 
     /*
-        Advance tail ring-buffer index.
+        Advance tail index.
     */
 
     LOAD16(R0, TAIL_INDEX),
@@ -513,11 +407,6 @@ const snakeProgram = assemble(
     /*
         ========================================
         FOOD EATEN
-
-        Don't move the tail.
-
-        Therefore the newly-added head remains,
-        making the snake one cell longer.
         ========================================
     */
 
@@ -530,21 +419,13 @@ const snakeProgram = assemble(
 
     STORE16(R0, LENGTH),
 
-    /*
-        If the snake fills the entire playfield,
-        there is nowhere left to put food.
-    */
-
     MOV(R1, SNAKE_GAME_SIZE),
     CMP(R0, R1),
     JE('snake_loop'),
 
     /*
         ========================================
-        GENERATE RANDOM FOOD
-
-        Keep trying until we find a framebuffer
-        cell that is not occupied by '#'.
+        GENERATE FOOD
         ========================================
     */
 
@@ -553,37 +434,16 @@ const snakeProgram = assemble(
     MOV(R0, SNAKE_GAME_SIZE),
     SYSCALL(syscallNumber.RANDOM),
 
-    /*
-        Convert game cell to framebuffer address.
-    */
-
     MOV(R1, snakeScreenStart),
     ADD(R1, R0),
 
-    /*
-        What's currently on that screen cell?
-    */
-
     LOAD_AT(R2, R1),
-
-    /*
-        If it contains '#', that's part of the
-        snake. Try another random cell.
-    */
 
     MOV(R3, 35),
     CMP(R2, R3),
     JE('snake_generate_food'),
 
-    /*
-        Save food cell.
-    */
-
     STORE16(R0, FOOD),
-
-    /*
-        Draw '*'.
-    */
 
     MOV(R2, 42),
     STORE_AT(R2, R1),
@@ -592,12 +452,121 @@ const snakeProgram = assemble(
 )
 
 /*
-    Filesystem.
+    ============================================
+    IPC DEMO
+    ============================================
+
+    /bin/receiver = PID 4
+    /bin/sender   = PID 5
+
+    Sender sends:
+
+        !
+
+    Receiver sends back:
+
+        A
+
+    The communication goes entirely through
+    kernel IPC.
+*/
+
+const IPC_ROW = 3
+const ipcDisplayAddress = FRAMEBUFFER_ADDRESS + FRAMEBUFFER_WIDTH * IPC_ROW
+
+/*
+    /bin/receiver
+
+    First wait for a message.
+
+    RECEIVE returns:
+
+        R0 = sender PID
+        R1 = message
+
+    Then send an acknowledgment back to the
+    sender using the returned PID.
+*/
+
+const receiverProgram = assemble(
+    MOV(R0, 73),                       // I
+    STORE(R0, ipcDisplayAddress),
+
+    MOV(R0, 80),                       // P
+    STORE(R0, ipcDisplayAddress + 1),
+
+    MOV(R0, 67),                       // C
+    STORE(R0, ipcDisplayAddress + 2),
+
+    MOV(R0, 58),                       // :
+    STORE(R0, ipcDisplayAddress + 3),
+
+    MOV(R0, 32),                       // space
+    STORE(R0, ipcDisplayAddress + 4),
+
+    LABEL('receiver_loop'),
+
+    /*
+        Block here until somebody sends us something.
+    */
+    SYSCALL(syscallNumber.RECEIVE),
+
+    /*
+        Display received message.
+    */
+    STORE(R1, ipcDisplayAddress + 5),
+
+    /*
+        R0 still contains the sender PID.
+
+        Send "A" back as an acknowledgment.
+    */
+    MOV(R1, 65),                       // A
+    SYSCALL(syscallNumber.SEND),
+
+    JMP('receiver_loop')
+)
+
+/*
+    /bin/sender
+
+    Receiver is PID 4 because kernel.js deliberately
+    spawns it fourth.
+
+    Send "!" and then block waiting for the reply.
+*/
+
+const RECEIVER_PID = 4
+
+const senderProgram = assemble(
+    MOV(R0, RECEIVER_PID),
+    MOV(R1, 33),                       // !
+    SYSCALL(syscallNumber.SEND),
+
+    /*
+        Wait for receiver's acknowledgment.
+    */
+    SYSCALL(syscallNumber.RECEIVE),
+
+    /*
+        R1 now contains "A".
+    */
+    STORE(R1, ipcDisplayAddress + 7),
+
+    HALT()
+)
+
+/*
+    ============================================
+    FILESYSTEM
+    ============================================
 */
 
 const INIT_START = 1024
 const ANIMATION_START = INIT_START + initProgram.length
 const SNAKE_START = ANIMATION_START + animationProgram.length
+const RECEIVER_START = SNAKE_START + snakeProgram.length
+const SENDER_START = RECEIVER_START + receiverProgram.length
 
 const fileTable = [
     {
@@ -642,14 +611,33 @@ const fileTable = [
         start: SNAKE_START,
         size: snakeProgram.length,
     },
+    {
+        id: 7,
+        parentDirID: 3,
+        type: 'file',
+        name: 'receiver',
+        start: RECEIVER_START,
+        size: receiverProgram.length,
+    },
+    {
+        id: 8,
+        parentDirID: 3,
+        type: 'file',
+        name: 'sender',
+        start: SENDER_START,
+        size: senderProgram.length,
+    },
 ]
 
 const fileTableBytes = new TextEncoder().encode(JSON.stringify(fileTable))
 
 bytes.set(fileTableBytes, 0)
+
 bytes.set(initProgram, INIT_START)
 bytes.set(animationProgram, ANIMATION_START)
 bytes.set(snakeProgram, SNAKE_START)
+bytes.set(receiverProgram, RECEIVER_START)
+bytes.set(senderProgram, SENDER_START)
 
 const read = (start, size) => {
     return bytes.slice(start, start + size)

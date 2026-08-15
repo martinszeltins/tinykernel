@@ -139,8 +139,11 @@ const run = (process, instructionCount) => {
 
         if (operation === opcode.SYSCALL) {
             const number = read16(instructionAddress + 1)
+            const result = syscall.handle(process, number)
 
-            syscall.handle(process, number)
+            if (result.blocked) {
+                return false
+            }
         }
 
         if (operation === opcode.HALT) {
