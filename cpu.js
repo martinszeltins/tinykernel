@@ -27,24 +27,22 @@ const run = (process, instructionCount) => {
         }
 
         if (operation === opcode.LOAD) {
-            const offset = read16(instructionAddress + 2)
+            const address = read16(instructionAddress + 2)
 
-            if (offset < process.dataSize) {
-                registers[a] = memory.read(
-                    process.dataStart + offset
-                )
-            }
+            registers[a] = memory.readProcess(
+                process,
+                address
+            )
         }
 
         if (operation === opcode.STORE) {
-            const offset = read16(instructionAddress + 2)
+            const address = read16(instructionAddress + 2)
 
-            if (offset < process.dataSize) {
-                memory.write(
-                    process.dataStart + offset,
-                    registers[a]
-                )
-            }
+            memory.writeProcess(
+                process,
+                address,
+                registers[a]
+            )
         }
 
         if (operation === opcode.ADD) {

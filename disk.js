@@ -1,3 +1,4 @@
+import { FRAMEBUFFER_ADDRESS } from './memory.js'
 import { assemble, HALT, MOV, R0, STORE } from './asm.js'
 
 /*
@@ -17,20 +18,20 @@ const bytes = new Uint8Array(1024 * 1024)
     private data memory.
 */
 const initProgram = assemble(
-    MOV(R0, 72),        // H
-    STORE(R0, 0),
+    MOV(R0, 72),                    // H
+    STORE(R0, FRAMEBUFFER_ADDRESS),
 
-    MOV(R0, 69),        // E
-    STORE(R0, 1),
+    MOV(R0, 69),                    // E
+    STORE(R0, FRAMEBUFFER_ADDRESS + 1),
 
-    MOV(R0, 76),        // L
-    STORE(R0, 2),
+    MOV(R0, 76),                    // L
+    STORE(R0, FRAMEBUFFER_ADDRESS + 2),
 
-    MOV(R0, 76),        // L
-    STORE(R0, 3),
+    MOV(R0, 76),                    // L
+    STORE(R0, FRAMEBUFFER_ADDRESS + 3),
 
-    MOV(R0, 79),        // O
-    STORE(R0, 4),
+    MOV(R0, 79),                    // O
+    STORE(R0, FRAMEBUFFER_ADDRESS + 4),
 
     HALT()
 )
