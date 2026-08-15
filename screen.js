@@ -1,7 +1,14 @@
-import { FRAMEBUFFER_HEIGHT, FRAMEBUFFER_WIDTH, memory } from './memory.js'
+import {
+    FRAMEBUFFER_HEIGHT,
+    FRAMEBUFFER_WIDTH,
+    memory,
+} from './memory.js'
 
 const render = () => {
-    const lines = []
+    const topBorder = `┌${'─'.repeat(FRAMEBUFFER_WIDTH)}┐`
+    const bottomBorder = `└${'─'.repeat(FRAMEBUFFER_WIDTH)}┘`
+
+    console.log(topBorder)
 
     for (let row = 0; row < FRAMEBUFFER_HEIGHT; row++) {
         let line = ''
@@ -18,12 +25,12 @@ const render = () => {
                 : ' '
         }
 
-        lines.push(line.trimEnd())
+        console.log(`│${line}│`)
     }
 
-    console.log(lines.join('\n').trimEnd())
+    console.log(bottomBorder)
 }
 
-export const monitor = {
+export const screen = {
     render,
 }
