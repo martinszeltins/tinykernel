@@ -8,6 +8,7 @@ export const kernel = {
         screen.start()
         process.spawn('/sbin/init')
         process.spawn('/bin/animate')
+        process.spawn('/games/snake')
         timer.start(scheduler.run)
     },
 }

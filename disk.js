@@ -10,6 +10,7 @@ import { assemble, JMP, MOV, R0, R1, R2, STORE } from './asm.js'
     1024 ──────────────────────────────────
         /sbin/init
         /bin/animate
+        /games/snake
 */
 
 const bytes = new Uint8Array(1024 * 1024)
@@ -50,78 +51,114 @@ const initProgram = assemble(
 */
 
 const ANIMATION_ROW = 2
-
-const animationStartAddress =
-    FRAMEBUFFER_ADDRESS +
-    FRAMEBUFFER_WIDTH * ANIMATION_ROW
+const animationStartAddress = FRAMEBUFFER_ADDRESS + FRAMEBUFFER_WIDTH * ANIMATION_ROW
 
 const animationInstructions = [
     MOV(R0, 32),                        // space
     MOV(R1, 42),                        // *
     STORE(R1, animationStartAddress),   // draw initial *
-    MOV(R2, 0),                         // keeps timing aligned
+    MOV(R2, 0),                         // keep timing aligned
 ]
 
-/*
-    The animation loop starts after the first
-    four instructions.
-
-    4 instructions × 4 bytes = byte 16
-*/
 const ANIMATION_LOOP = 16
 
-/*
-    Move five positions to the right.
-*/
 for (let position = 1; position <= 5; position++) {
     animationInstructions.push(
-        STORE(
-            R0,
-            animationStartAddress + position - 1
-        ),
-        STORE(
-            R1,
-            animationStartAddress + position
-        )
+        STORE(R0, animationStartAddress + position - 1),
+        STORE(R1, animationStartAddress + position)
     )
 }
 
-/*
-    Move five positions back to the left.
-*/
 for (let position = 4; position >= 0; position--) {
     animationInstructions.push(
-        STORE(
-            R0,
-            animationStartAddress + position + 1
-        ),
-        STORE(
-            R1,
-            animationStartAddress + position
-        )
+        STORE(R0, animationStartAddress + position + 1),
+        STORE(R1, animationStartAddress + position)
     )
 }
 
-/*
-    Keep the JMP aligned with our two-instruction
-    scheduler time slice.
-
-    Then go back to the beginning of the movement loop.
-*/
 animationInstructions.push(
     MOV(R2, 0),
     JMP(ANIMATION_LOOP)
 )
 
-const animationProgram = assemble(
-    ...animationInstructions
+const animationProgram = assemble(...animationInstructions)
+
+/*
+    /games/snake
+
+    A five-character snake moves continuously
+    from left to right.
+
+    When it reaches the right edge of the screen,
+    it wraps around to the left.
+
+    R0 = space
+    R1 = snake body "#"
+*/
+
+const SNAKE_ROW = 5
+const SNAKE_LENGTH = 5
+const snakeStartAddress = FRAMEBUFFER_ADDRESS + FRAMEBUFFER_WIDTH * SNAKE_ROW
+
+const snakeInstructions = [
+    MOV(R0, 32),                    // space
+    MOV(R1, 35),                    // #
+
+    STORE(R1, snakeStartAddress),
+    STORE(R1, snakeStartAddress + 1),
+    STORE(R1, snakeStartAddress + 2),
+    STORE(R1, snakeStartAddress + 3),
+    STORE(R1, snakeStartAddress + 4),
+
+    /*
+        Padding instruction so the movement loop
+        starts aligned with our 2-instruction time slice.
+    */
+    MOV(R2, 0),
+]
+
+/*
+    8 instructions × 4 bytes = byte 32
+*/
+const SNAKE_LOOP = 32
+
+/*
+    Every movement consists of exactly two instructions:
+
+        erase tail
+        draw new head
+
+    Because TIME_SLICE = 2, the snake moves
+    exactly once per scheduler tick.
+*/
+for (let position = 0; position < FRAMEBUFFER_WIDTH; position++) {
+    const tail = position
+    const head = (position + SNAKE_LENGTH) % FRAMEBUFFER_WIDTH
+
+    snakeInstructions.push(
+        STORE(R0, snakeStartAddress + tail),
+        STORE(R1, snakeStartAddress + head)
+    )
+}
+
+/*
+    After 80 movements the snake is back at its
+    original position, so repeat forever.
+*/
+snakeInstructions.push(
+    MOV(R2, 0),
+    JMP(SNAKE_LOOP)
 )
 
-const INIT_START = 1024
+const snakeProgram = assemble(...snakeInstructions)
 
-const ANIMATION_START =
-    INIT_START +
-    initProgram.length
+/*
+    Physical file locations on disk.
+*/
+
+const INIT_START = 1024
+const ANIMATION_START = INIT_START + initProgram.length
+const SNAKE_START = ANIMATION_START + animationProgram.length
 
 const fileTable = [
     {
@@ -152,6 +189,20 @@ const fileTable = [
         start: ANIMATION_START,
         size: animationProgram.length,
     },
+    {
+        id: 5,
+        parentDirID: 0,
+        type: 'directory',
+        name: 'games',
+    },
+    {
+        id: 6,
+        parentDirID: 5,
+        type: 'file',
+        name: 'snake',
+        start: SNAKE_START,
+        size: snakeProgram.length,
+    },
 ]
 
 const fileTableBytes = new TextEncoder().encode(
@@ -159,8 +210,10 @@ const fileTableBytes = new TextEncoder().encode(
 )
 
 bytes.set(fileTableBytes, 0)
+
 bytes.set(initProgram, INIT_START)
 bytes.set(animationProgram, ANIMATION_START)
+bytes.set(snakeProgram, SNAKE_START)
 
 const read = (start, size) => {
     return bytes.slice(start, start + size)
