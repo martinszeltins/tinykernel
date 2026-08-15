@@ -45,6 +45,24 @@ export const STORE = (register, offset) => {
     ]
 }
 
+export const LOAD_AT = (register, addressRegister) => {
+    return [
+        opcode.LOAD_AT,
+        register,
+        addressRegister,
+        0,
+    ]
+}
+
+export const STORE_AT = (register, addressRegister) => {
+    return [
+        opcode.STORE_AT,
+        register,
+        addressRegister,
+        0,
+    ]
+}
+
 export const ADD = (registerA, registerB) => {
     return [
         opcode.ADD,
@@ -125,10 +143,6 @@ export const HALT = () => {
     ]
 }
 
-/*
-    Take our readable instructions and turn them
-    into the actual sequence of machine-code bytes.
-*/
 export const assemble = (...instructions) => {
     return new Uint8Array(instructions.flat())
 }

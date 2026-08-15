@@ -10,4 +10,6 @@ export const opcode = {
     JNE: 9,
     SYSCALL: 10,
     HALT: 11,
+    LOAD_AT: 12,
+    STORE_AT: 13,
 }
