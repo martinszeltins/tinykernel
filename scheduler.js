@@ -4,16 +4,17 @@ import { process } from './process.js'
 const TIME_SLICE = 3
 
 /**
- * Simple round-robin scheduler.
+ * Give every process one CPU time slice.
  */
 const run = () => {
-    while (process.processes.length > 0) {
-        for (const currentProcess of [...process.processes]) {
-            const hasExited = cpu.run(currentProcess, TIME_SLICE)
+    for (const currentProcess of [...process.processes]) {
+        const hasExited = cpu.run(
+            currentProcess,
+            TIME_SLICE
+        )
 
-            if (hasExited) {
-                process.exit(currentProcess)
-            }
+        if (hasExited) {
+            process.exit(currentProcess)
         }
     }
 }

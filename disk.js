@@ -1,5 +1,5 @@
 import { FRAMEBUFFER_ADDRESS } from './memory.js'
-import { assemble, HALT, MOV, R0, STORE } from './asm.js'
+import { assemble, JMP, MOV, R0, STORE } from './asm.js'
 
 /*
     0 ─────────────────────────────────────
@@ -14,31 +14,30 @@ const bytes = new Uint8Array(1024 * 1024)
 /*
     /sbin/init
 
-    Write "HELLO" into this process's
-    private data memory.
+    Write "HELLO" to the framebuffer.
+
+    After that, jump to itself forever so that
+    the init process stays alive.
 */
 const initProgram = assemble(
-    MOV(R0, 72),                    // H
+    MOV(R0, 72),                        // H
     STORE(R0, FRAMEBUFFER_ADDRESS),
 
-    MOV(R0, 69),                    // E
+    MOV(R0, 69),                        // E
     STORE(R0, FRAMEBUFFER_ADDRESS + 1),
 
-    MOV(R0, 76),                    // L
+    MOV(R0, 76),                        // L
     STORE(R0, FRAMEBUFFER_ADDRESS + 2),
 
-    MOV(R0, 76),                    // L
+    MOV(R0, 76),                        // L
     STORE(R0, FRAMEBUFFER_ADDRESS + 3),
 
-    MOV(R0, 79),                    // O
+    MOV(R0, 79),                        // O
     STORE(R0, FRAMEBUFFER_ADDRESS + 4),
 
-    HALT()
+    JMP(40)
 )
 
-/*
-    File table at the beginning of the disk.
-*/
 const fileTable = [
     {
         id: 1,
@@ -61,11 +60,6 @@ const fileTableBytes = new TextEncoder().encode(
 )
 
 bytes.set(fileTableBytes, 0)
-
-/*
-    Put the actual /sbin/init machine-code bytes
-    onto the disk starting at byte 1024.
-*/
 bytes.set(initProgram, 1024)
 
 const read = (start, size) => {

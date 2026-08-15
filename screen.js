@@ -4,11 +4,18 @@ import {
     memory,
 } from './memory.js'
 
-const render = () => {
-    const topBorder = `┌${'─'.repeat(FRAMEBUFFER_WIDTH)}┐`
-    const bottomBorder = `└${'─'.repeat(FRAMEBUFFER_WIDTH)}┘`
+let previousFrame = ''
 
-    console.log(topBorder)
+const start = () => {
+    process.stdout.write('\x1b[2J\x1b[H')
+}
+
+const render = () => {
+    const lines = []
+
+    lines.push(
+        `┌${'─'.repeat(FRAMEBUFFER_WIDTH)}┐`
+    )
 
     for (let row = 0; row < FRAMEBUFFER_HEIGHT; row++) {
         let line = ''
@@ -25,12 +32,29 @@ const render = () => {
                 : ' '
         }
 
-        console.log(`│${line}│`)
+        lines.push(`│${line}│`)
     }
 
-    console.log(bottomBorder)
+    lines.push(
+        `└${'─'.repeat(FRAMEBUFFER_WIDTH)}┘`
+    )
+
+    const frame = lines.join('\n')
+
+    /*
+        Only redraw the real terminal when the simulated
+        framebuffer has actually changed.
+    */
+    if (frame === previousFrame) {
+        return
+    }
+
+    previousFrame = frame
+
+    process.stdout.write(`\x1b[H${frame}`)
 }
 
 export const screen = {
+    start,
     render,
 }
