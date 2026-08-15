@@ -14,7 +14,7 @@
                 type: "file",
                 name: "init",
                 start: 1024,
-                size: 100
+                size: initProgram.length
             }
         ]
     1024 ──────────────────────────────────
@@ -25,7 +25,6 @@
 import { disk } from './disk.js'
 
 const FILE_TABLE_SIZE = 1024
-const DATA_START = FILE_TABLE_SIZE
 
 /*
     The file table is stored in the first 1024 bytes of the disk.

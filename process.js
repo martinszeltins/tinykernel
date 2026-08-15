@@ -3,6 +3,8 @@ import { memory } from './memory.js'
 
 const processes = []
 
+let nextPID = 1
+
 const spawn = path => {
     const program = filesystem.read(path)
 
@@ -10,7 +12,7 @@ const spawn = path => {
     const data = memory.allocateData()
 
     const newProcess = {
-        pid: processes.length + 1,
+        pid: nextPID++,
         programStart,
         programSize: program.length,
         dataStart: data.start,
