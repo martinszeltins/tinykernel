@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tiny JavaScript Kernel — Architecture & Internals</title>
+<style>
+:root{--bg:#0b1020;--panel:#121a2e;--panel2:#0f1628;--text:#e7edf8;--muted:#9fb0ca;--line:#2b3858;--cyan:#6ee7ff;--green:#8bffb5;--yellow:#ffd36e;--purple:#c4b5fd;--red:#ff8b8b;--shadow:0 18px 45px rgba(0,0,0,.25)}
+*{box-sizing:border-box}html{scroll-behavior:smooth;background:var(--bg)}body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--text);background:radial-gradient(circle at 15% -10%,rgba(110,231,255,.08),transparent 30%),radial-gradient(circle at 85% 0%,rgba(139,92,246,.1),transparent 30%),var(--bg);line-height:1.62}a{color:var(--cyan);text-decoration:none}a:hover{text-decoration:underline}code,pre,.mono{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace}code{background:rgba(110,231,255,.07);border:1px solid rgba(110,231,255,.14);padding:.08rem .3rem;border-radius:.35rem;color:#d9f8ff}pre{margin:0;overflow:auto;background:#080d19;border:1px solid var(--line);border-radius:14px;padding:18px;color:#dce7f8;line-height:1.5}.page{max-width:1380px;margin:auto;padding:0 24px 80px}.hero{padding:68px 0 42px;display:grid;grid-template-columns:1.3fr .7fr;gap:30px;align-items:center}.eyebrow{color:var(--cyan);font-weight:900;letter-spacing:.16em;text-transform:uppercase;font-size:.78rem;margin-bottom:12px}h1,h2,h3{line-height:1.15;margin-top:0}h1{font-size:clamp(2.7rem,6vw,5.6rem);letter-spacing:-.05em;margin-bottom:16px}h2{font-size:clamp(1.9rem,3vw,3rem);letter-spacing:-.035em;margin-bottom:16px}h3{font-size:1.22rem;margin-bottom:10px}.lead,.intro,.card p,.small{color:var(--muted)}.lead{font-size:1.17rem;max-width:850px}.hero-card,.card{background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.012));border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}.hero-card{padding:24px}.hero-card .big{font-size:3.6rem;font-weight:950;letter-spacing:-.05em;color:var(--green)}.hero-card p{margin:0;color:var(--muted)}.status{display:inline-flex;border:1px solid rgba(52,211,153,.35);background:rgba(52,211,153,.07);color:#a7f3d0;border-radius:999px;padding:6px 11px;font-weight:850}.toc{position:sticky;top:0;z-index:10;background:rgba(11,16,32,.9);backdrop-filter:blur(14px);border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:0 -24px 30px;padding:10px 24px;overflow-x:auto;white-space:nowrap}.toc a{display:inline-block;margin-right:17px;color:var(--muted);font-size:.91rem;font-weight:800}.toc a:hover{color:var(--text);text-decoration:none}section{padding:52px 0 18px;scroll-margin-top:68px}.intro{max-width:960px;font-size:1.05rem;margin-bottom:24px}.grid{display:grid;gap:20px}.two{grid-template-columns:repeat(2,minmax(0,1fr))}.three{grid-template-columns:repeat(3,minmax(0,1fr))}.four{grid-template-columns:repeat(4,minmax(0,1fr))}.card{padding:21px}.tag{display:inline-flex;border:1px solid currentColor;border-radius:999px;padding:4px 9px;text-transform:uppercase;letter-spacing:.05em;font-weight:900;font-size:.76rem;margin-bottom:12px}.kernel{color:var(--purple)}.program{color:#7dd3fc}.data{color:#6ee7b7}.device{color:#fcd34d}.disk{color:#fda4af}.ipc{color:#d8b4fe}.callout{border-left:4px solid var(--cyan);background:rgba(110,231,255,.055);padding:16px 18px;border-radius:0 12px 12px 0;color:var(--muted);margin:22px 0}.callout strong{color:var(--text)}.flow{display:flex;align-items:stretch;gap:10px;flex-wrap:wrap;margin-top:18px}.node{flex:1 1 150px;min-width:145px;border:1px solid var(--line);background:var(--panel2);border-radius:14px;padding:15px;text-align:center;font-weight:850}.arrow{display:flex;align-items:center;color:var(--muted);font-size:1.4rem}.arch{display:grid;gap:11px;margin-top:22px}.layer{border:1px solid var(--line);border-radius:15px;padding:17px;display:grid;grid-template-columns:180px 1fr;gap:18px;align-items:center;background:var(--panel2)}.layer.kernelL{border-color:rgba(139,92,246,.45);background:rgba(139,92,246,.055)}.layer.userL{border-color:rgba(56,189,248,.4);background:rgba(56,189,248,.045)}.layer.hwL{border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.045)}.label{font-weight:950}.chips{display:flex;gap:8px;flex-wrap:wrap}.chip{border:1px solid var(--line);border-radius:10px;padding:7px 10px;color:var(--muted);background:rgba(255,255,255,.02);font-size:.9rem}.memory-wrap{display:grid;grid-template-columns:1.15fr .85fr;gap:24px;align-items:start}.memory-map,.address-space,.disk-map{border:1px solid var(--line);border-radius:18px;overflow:hidden;background:#09101f;box-shadow:var(--shadow)}.seg{padding:15px 17px;border-bottom:1px solid rgba(255,255,255,.08);display:grid;grid-template-columns:145px 1fr auto;gap:14px;align-items:center;min-height:66px}.seg:last-child,.as:last-child,.diskrow:last-child{border-bottom:0}.seg .addr{font-weight:850}.seg .name{font-weight:950}.seg .size{color:var(--muted);white-space:nowrap}.kseg{background:rgba(139,92,246,.15)}.pseg{background:rgba(56,189,248,.12)}.dseg{background:rgba(52,211,153,.12)}.gseg{background:rgba(159,176,202,.06)}.fseg{background:rgba(245,158,11,.14)}.as{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.08)}.as .top{display:flex;justify-content:space-between;gap:16px;font-weight:900}.as small{color:var(--muted)}.diskrow{padding:15px 17px;border-bottom:1px solid rgba(255,255,255,.08);display:grid;grid-template-columns:145px 1fr;gap:16px}.diskrow.head{background:rgba(251,113,133,.12)}.diskrow.prog{background:rgba(56,189,248,.07)}.tree{background:#080d19;border:1px solid var(--line);border-radius:16px;padding:18px 20px;white-space:pre;overflow:auto;color:#dce7f8}.tablewrap{overflow-x:auto}table{width:100%;border-collapse:collapse;background:var(--panel2);border:1px solid var(--line);border-radius:16px;overflow:hidden}th,td{border-bottom:1px solid var(--line);padding:11px 13px;text-align:left;vertical-align:top}tr:last-child td{border-bottom:0}th{background:rgba(255,255,255,.025);color:#cbd5e1;font-size:.88rem}td{color:var(--muted)}td:first-child{color:var(--text);font-weight:850;white-space:nowrap}.pcbbox{border:1px solid var(--line);border-radius:16px;overflow:hidden}.pcbtitle{padding:14px 16px;background:rgba(56,189,248,.08);font-weight:900;display:flex;justify-content:space-between}.pcb{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line)}.pcb div{background:#0d1425;padding:11px 13px;color:var(--muted)}.pcb strong{color:var(--text)}.timeline{display:grid;grid-template-columns:100px repeat(5,minmax(90px,1fr));border:1px solid var(--line);border-radius:16px;overflow:auto;background:var(--line);gap:1px}.timeline>div{background:#0d1425;padding:12px;min-height:52px}.timeline .head{font-weight:900;background:#111a30}.run{background:rgba(56,189,248,.12)!important;color:#b9ecff}.blocked{background:rgba(255,123,123,.1)!important;color:#ffc0c0}.wake{background:rgba(52,211,153,.12)!important;color:#abffd7}.ipcdiag{display:grid;grid-template-columns:1fr 80px 1.2fr 80px 1fr;gap:8px;align-items:center}.ipcbox{border:1px solid var(--line);border-radius:16px;padding:18px;text-align:center;background:var(--panel2)}.ipcbox.mid{border-color:rgba(192,132,252,.5);background:rgba(192,132,252,.07)}.ipca{text-align:center;color:var(--muted);font-size:1.8rem}.snake{background:#050914;border:1px solid var(--line);border-radius:16px;padding:14px;overflow:auto;color:#d8f7ff;white-space:pre;font-family:"SFMono-Regular",Consolas,monospace;line-height:1.25}.notes{margin:0;padding-left:1.2rem;color:var(--muted)}.notes li{margin:.48rem 0}.footer{margin-top:65px;padding-top:28px;border-top:1px solid var(--line);color:var(--muted)}@media(max-width:980px){.hero,.memory-wrap,.two,.three,.four{grid-template-columns:1fr}.ipcdiag{grid-template-columns:1fr}.ipca{transform:rotate(90deg)}.layer{grid-template-columns:1fr}.timeline{grid-template-columns:90px repeat(5,160px)}}@media(max-width:640px){.page{padding:0 14px 50px}.toc{margin-left:-14px;margin-right:-14px;padding-left:14px;padding-right:14px}.hero{padding-top:45px}.seg,.diskrow{grid-template-columns:1fr}.seg .size{white-space:normal}}
+</style>
+</head>
+<body>
+<div class="page">
+<header class="hero">
+<div><div class="eyebrow">Tiny JavaScript Kernel</div><h1>How the whole machine works</h1><p class="lead">A visual guide to the CPU, RAM, disk, filesystem, processes, scheduler, system calls, memory-mapped I/O, keyboard, framebuffer, IPC, and the programs running on top. The goal is not to imitate Linux line-for-line. The goal is to expose the core ideas of a real kernel in the smallest understandable form.</p><div style="margin-top:22px"><span class="status">● Major kernel concepts implemented</span></div></div>
+<aside class="hero-card"><div class="big">1 MiB</div><p>simulated RAM</p><div class="big" style="margin-top:18px">1 MiB</div><p>simulated disk</p><div class="big" style="margin-top:18px">4</div><p>general-purpose CPU registers</p></aside>
+</header>
+<nav class="toc"><a href="#big">Big picture</a><a href="#boot">Boot</a><a href="#cpu">CPU</a><a href="#ram">RAM</a><a href="#disk">Disk & FS</a><a href="#processes">Processes</a><a href="#scheduler">Scheduler</a><a href="#syscalls">System calls</a><a href="#io">I/O</a><a href="#ipc">IPC</a><a href="#snake">Snake</a><a href="#flow">Flows</a><a href="#limits">Simplifications</a></nav>
+<section id="big"><h2>1. The big picture</h2><p class="intro">The project is a simulated computer and kernel written in JavaScript. Node.js is the host environment, but the programs inside the simulated machine do not call Node directly. They execute our own machine instructions, use our own memory, load from our own filesystem, and talk to the kernel through our own mechanisms.</p>
+<div class="arch">
+<div class="layer"><div class="label">Host machine</div><div class="chips"><span class="chip">Linux terminal</span><span class="chip">Node.js runtime</span><span class="chip">real keyboard</span><span class="chip">real stdout</span></div></div>
+<div class="layer kernelL"><div class="label">Kernel</div><div class="chips"><span class="chip">process manager</span><span class="chip">scheduler</span><span class="chip">memory manager</span><span class="chip">syscall handler</span><span class="chip">IPC mailboxes</span><span class="chip">filesystem</span><span class="chip">timer</span></div></div>
+<div class="layer userL"><div class="label">Programs</div><div class="chips"><span class="chip">/sbin/init</span><span class="chip">/bin/animate</span><span class="chip">/games/snake</span><span class="chip">/bin/receiver</span><span class="chip">/bin/sender</span></div></div>
+<div class="layer hwL"><div class="label">Simulated hardware</div><div class="chips"><span class="chip">CPU</span><span class="chip">1 MiB RAM</span><span class="chip">1 MiB disk</span><span class="chip">timer</span><span class="chip">framebuffer</span><span class="chip">keyboard register</span></div></div>
+</div>
+<div class="callout"><strong>The central object is the process.</strong> A program becomes a process when the kernel loads its bytes into RAM, allocates private memory, creates CPU state for it, assigns a PID, and places it in the process table. The scheduler then repeatedly gives that process CPU time.</div></section>
+<section id="boot"><h2>2. Boot</h2><p class="intro">We intentionally skip BIOS/UEFI and a bootloader. Conceptually, imagine the bootloader has already put the kernel in memory and transferred control to it. Our JavaScript entry point begins there.</p><div class="flow"><div class="node"><code>main.js</code><br><span class="small">kernel.run()</span></div><div class="arrow">→</div><div class="node">screen starts<br><span class="small">terminal renderer</span></div><div class="arrow">→</div><div class="node">keyboard starts<br><span class="small">raw input</span></div><div class="arrow">→</div><div class="node">programs spawn<br><span class="small">disk → RAM → PCB</span></div><div class="arrow">→</div><div class="node">timer starts<br><span class="small">scheduler ticks</span></div></div><div class="callout"><strong>Spawn is the bridge from program to process.</strong> The filesystem returns machine-code bytes, RAM receives those bytes, private data is allocated, and a process control structure is created.</div></section>
+<section id="cpu"><h2>3. CPU and instructions</h2><p class="intro">Programs are not JavaScript functions. They are arrays of raw bytes representing instructions for our simulated CPU. Every instruction is exactly <strong>4 bytes</strong>. The CPU fetches, decodes, executes, and advances the instruction pointer unless a branch changes it.</p><div class="grid two"><div class="card"><span class="tag program">CPU state</span><h3>Per process</h3><pre>R0, R1, R2, R3
+instructionPointer
+zeroFlag</pre><p>Registers and instruction pointer live in the process, so switching processes naturally switches CPU context.</p></div><div class="card"><span class="tag program">Format</span><h3>Fixed 4-byte instruction</h3><pre>[ opcode, a, b, c ]</pre><p>Some instructions treat bytes 2–3 as a 16-bit value; others treat them as register numbers.</p></div></div>
+<div class="tablewrap" style="margin-top:22px"><table><thead><tr><th>Instruction</th><th>Meaning</th><th>Use</th></tr></thead><tbody>
+<tr><td>MOV</td><td>Immediate value → register.</td><td>Constants, counters, addresses.</td></tr><tr><td>LOAD / STORE</td><td>Read/write a fixed process-visible address.</td><td>Private data and MMIO.</td></tr><tr><td>LOAD16 / STORE16</td><td>16-bit fixed-address memory access.</td><td>Positions, indexes, lengths.</td></tr><tr><td>LOAD_AT / STORE_AT</td><td>Indirect byte access through a register-held address.</td><td>Dynamic framebuffer cells.</td></tr><tr><td>LOAD16_AT / STORE16_AT</td><td>Indirect 16-bit access.</td><td>Snake body ring buffer.</td></tr><tr><td>ADD / SUB / MOD</td><td>Arithmetic on registers.</td><td>Movement, indexing, wraparound.</td></tr><tr><td>CMP</td><td>Compare registers; set zeroFlag.</td><td>Conditions.</td></tr><tr><td>JMP / JE / JNE</td><td>Control flow.</td><td>Loops and branches.</td></tr><tr><td>SYSCALL</td><td>Request a kernel service.</td><td>Randomness and IPC.</td></tr><tr><td>NOP</td><td>Do nothing.</td><td>Timing padding in animate.</td></tr><tr><td>HALT</td><td>Terminate process.</td><td>Process exit.</td></tr>
+</tbody></table></div><div class="callout"><strong>The assembler is only syntax sugar.</strong> <code>MOV(R0, 72)</code> becomes four bytes. Labels are resolved before execution; the CPU only ever sees numeric addresses.</div></section>
+<section id="ram"><h2>4. Physical RAM</h2><p class="intro">The simulated machine has exactly 1 MiB of physical RAM backed by a <code>Uint8Array</code>.</p><div class="memory-wrap"><div><div class="memory-map"><div class="seg kseg"><div class="addr">0</div><div><div class="name">Kernel region</div><span class="small">Conceptual kernel code/data.</span></div><div class="size">64 KiB</div></div><div class="seg pseg"><div class="addr">65,536</div><div><div class="name">Program area</div><span class="small">Loaded executable bytes.</span></div><div class="size">448 KiB</div></div><div class="seg dseg"><div class="addr">524,288</div><div><div class="name">Process data slots</div><span class="small">8 private fixed-size regions.</span></div><div class="size">8 × 60 KiB</div></div><div class="seg gseg"><div class="addr">~1,015,808</div><div><div class="name">Unused remainder</div><span class="small">Fixed slots do not divide perfectly.</span></div><div class="size">~30 KiB</div></div><div class="seg fseg"><div class="addr">1,046,576</div><div><div class="name">Physical framebuffer</div><span class="small">80 × 25 characters.</span></div><div class="size">2,000 B</div></div></div></div>
+<div><div class="address-space"><div class="as"><div class="top"><span>0x0000–0xEFFF</span><span>private RAM</span></div><small>Translated to this process's own data slot.</small></div><div class="as" style="background:rgba(245,158,11,.1)"><div class="top"><span>0xF000–0xF7CF</span><span>framebuffer</span></div><small>Shared memory-mapped output device.</small></div><div class="as"><div class="top"><span>0xF7D0–0xF7FF</span><span>unused MMIO</span></div><small>Free address space.</small></div><div class="as" style="background:rgba(245,158,11,.1)"><div class="top"><span>0xF800</span><span>keyboard</span></div><small>Read returns latest key code and consumes it.</small></div><div class="as"><div class="top"><span>0xF801–0xFFFF</span><span>reserved</span></div><small>Future devices.</small></div></div><div class="callout"><strong>Simple address translation:</strong> process address <code>42</code> maps to <code>process.dataStart + 42</code>. The same visible address in another process maps elsewhere physically.</div></div></div>
+<div class="grid three" style="margin-top:24px"><div class="card"><span class="tag data">Program memory</span><h3>Variable-size first fit</h3><p>Executable code uses free blocks. Exited programs free and merge adjacent blocks.</p></div><div class="card"><span class="tag data">Private data</span><h3>Fixed 0xF000-byte slots</h3><p>Each process gets 61,440 private bytes. This keeps allocation and isolation obvious.</p></div><div class="card"><span class="tag device">Device memory</span><h3>MMIO bypasses private RAM</h3><p>Addresses in the device range are routed to shared device behavior instead of the process data slot.</p></div></div></section>
+<section id="disk"><h2>5. Disk and filesystem</h2><p class="intro">Disk is another 1 MiB byte array. The filesystem metadata really lives on the disk: the first 1024 bytes contain a serialized file table, followed by contiguous program bytes.</p><div class="grid two"><div class="disk-map"><div class="diskrow head"><div class="mono">0–1023</div><div><strong>File table</strong><br><span class="small">JSON metadata.</span></div></div><div class="diskrow prog"><div class="mono">1024...</div><div><strong>/sbin/init</strong></div></div><div class="diskrow prog"><div class="mono">next...</div><div><strong>/bin/animate</strong></div></div><div class="diskrow prog"><div class="mono">next...</div><div><strong>/games/snake</strong></div></div><div class="diskrow prog"><div class="mono">next...</div><div><strong>/bin/receiver</strong></div></div><div class="diskrow prog"><div class="mono">next...</div><div><strong>/bin/sender</strong></div></div></div><div><div class="tree">/
+├── sbin/
+│   └── init
+├── bin/
+│   ├── animate
+│   ├── receiver
+│   └── sender
+└── games/
+    └── snake</div><div class="callout"><strong>Directories are entries too.</strong> A directory has an ID; children point to it with <code>parentDirID</code>. Root is represented by parent ID <code>0</code>.</div></div></div>
+<h3 style="margin-top:30px">Resolving <code>/games/snake</code></h3><div class="flow"><div class="node">split path</div><div class="arrow">→</div><div class="node">root ID 0</div><div class="arrow">→</div><div class="node">find games</div><div class="arrow">→</div><div class="node">find snake</div><div class="arrow">→</div><div class="node">disk.read(start,size)</div></div><div class="callout"><strong>Raw disk has no paths.</strong> The filesystem is the layer that gives byte ranges names, types, parent relationships, starts, and sizes.</div></section>
+<section id="processes"><h2>6. Programs become processes</h2><p class="intro">A program on disk is passive bytes. A process is the running entity created when the kernel combines those bytes with memory and CPU state.</p><div class="pcbbox"><div class="pcbtitle"><span>Example process control structure</span><span>PID 3</span></div><div class="pcb"><div><strong>pid</strong><br>unique process ID</div><div><strong>state</strong><br>ready / blocked</div><div><strong>programStart</strong><br>physical code address</div><div><strong>programSize</strong><br>code bytes</div><div><strong>dataStart</strong><br>private physical region</div><div><strong>dataSize</strong><br>0xF000</div><div><strong>instructionPointer</strong><br>current code offset</div><div><strong>registers</strong><br>R0–R3</div><div><strong>zeroFlag</strong><br>true / false</div></div></div><div class="grid three" style="margin-top:22px"><div class="card"><span class="tag kernel">Create</span><p>Read program, allocate code memory, allocate private data, create PCB, assign PID, register IPC mailbox.</p></div><div class="card"><span class="tag kernel">Run</span><p>The scheduler repeatedly calls the CPU with that process. CPU state lives inside the PCB.</p></div><div class="card"><span class="tag kernel">Exit</span><p>Free program memory, clear private data, unregister IPC mailbox, remove PCB from process table.</p></div></div></section>
+<section id="scheduler"><h2>7. Scheduler and time sharing</h2><p class="intro">The simulated timer fires every 75 ms. Each tick makes one scheduler pass. Every ready process gets up to 56 instructions; blocked processes get none.</p><div class="timeline"><div class="head">tick</div><div class="head">PID 1 init</div><div class="head">PID 2 animate</div><div class="head">PID 3 snake</div><div class="head">PID 4 recv</div><div class="head">PID 5 send</div><div class="head">t=0</div><div class="run">run</div><div class="run">run</div><div class="run">run</div><div class="blocked">RECEIVE → block</div><div class="run">SEND</div><div class="head">t=75ms</div><div class="run">run</div><div class="run">run</div><div class="run">run</div><div class="wake">woken → run</div><div class="blocked">RECEIVE → block</div></div><div class="callout"><strong>Context switching is just selecting a different PCB.</strong> The CPU reads and updates registers and instruction pointer stored on whichever process the scheduler passes in.</div></section>
+<section id="syscalls"><h2>8. System calls</h2><p class="intro">Normal CPU instructions handle local computation and memory access. A syscall is used when a program needs a kernel-owned service. Arguments and return values use registers.</p><div class="tablewrap"><table><thead><tr><th>No.</th><th>Name</th><th>Input</th><th>Result</th></tr></thead><tbody><tr><td>1</td><td>RANDOM</td><td><code>R0 = max</code></td><td><code>R0 = 0..max-1</code></td></tr><tr><td>2</td><td>SEND</td><td><code>R0 = PID</code>, <code>R1 = message</code></td><td><code>R0 = 1/0</code>; wakes blocked receiver.</td></tr><tr><td>3</td><td>RECEIVE</td><td>none</td><td><code>R0 = sender PID</code>, <code>R1 = message</code>; blocks if empty.</td></tr></tbody></table></div><div class="flow"><div class="node">program</div><div class="arrow">→</div><div class="node">SYSCALL instruction</div><div class="arrow">→</div><div class="node">CPU</div><div class="arrow">→</div><div class="node">kernel handler</div><div class="arrow">→</div><div class="node">return / block / wake</div></div><div class="callout"><strong>Blocking RECEIVE:</strong> when no message exists, the process becomes blocked and the CPU returns without advancing the instruction pointer. When SEND later wakes it, the same RECEIVE instruction is retried.</div></section>
+<section id="io"><h2>9. Input/output through memory-mapped I/O</h2><p class="intro">This machine exposes devices through special addresses. Programs use ordinary memory instructions; <code>memory.js</code> decides whether an address means private RAM or device hardware.</p><div class="grid two"><div class="card"><span class="tag device">Output</span><h3>Framebuffer at 0xF000</h3><p>2,000 bytes represent 80×25 text cells. Writing an ASCII code changes a cell. <code>screen.js</code> periodically reads the physical framebuffer and renders it to the real terminal.</p><pre>STORE '#', framebufferAddress
+        ↓
+memory.js
+        ↓
+physical framebuffer
+        ↓
+screen.js
+        ↓
+terminal</pre></div><div class="card"><span class="tag device">Input</span><h3>Keyboard at 0xF800</h3><p><code>keyboard.js</code> listens to Node stdin and converts arrow keys or WASD to small codes. A process reads <code>0xF800</code> with LOAD.</p><pre>0 = none
+1 = up
+2 = right
+3 = down
+4 = left</pre></div></div><div class="callout"><strong>There is no keyboard or framebuffer syscall because this machine deliberately permits direct MMIO.</strong> That is a design choice, not a universal OS rule.</div></section>
+<section id="ipc"><h2>10. Interprocess communication</h2><p class="intro">Each process gets a kernel-managed mailbox. Processes stay isolated; SEND and RECEIVE are the explicit bridge between them.</p><div class="ipcdiag"><div class="ipcbox"><strong>PID 5 sender</strong><br><span class="small">R0=4, R1='!'<br>SYSCALL SEND</span></div><div class="ipca">→</div><div class="ipcbox mid"><strong>Kernel mailbox</strong><br><span class="small">messages are FIFO<br>sender PID is preserved</span></div><div class="ipca">→</div><div class="ipcbox"><strong>PID 4 receiver</strong><br><span class="small">SYSCALL RECEIVE<br>R0=5, R1='!'</span></div></div><div class="grid three" style="margin-top:22px"><div class="card"><span class="tag ipc">Queue</span><p>Messages are appended to a per-process FIFO mailbox.</p></div><div class="card"><span class="tag ipc">Block</span><p>An empty RECEIVE marks the process blocked so it stops consuming CPU time.</p></div><div class="card"><span class="tag ipc">Wake</span><p>SEND to a blocked process marks it ready again.</p></div></div><div class="callout"><strong>This is real kernel-mediated IPC in miniature.</strong> Sockets, pipes, channels, ports, and message queues are richer solutions to the same fundamental problem: isolated processes need an explicit way to communicate.</div></section>
+<section id="snake"><h2>11. Snake as a kernel stress test</h2><p class="intro">Snake exercises nearly everything at once: filesystem loading, process creation, scheduling, CPU instructions, private memory, indirect addressing, randomness via syscall, keyboard MMIO, framebuffer output, and time sharing.</p><div class="snake">┌────────────────────────────────────────────────────────────────────────────────┐
+│HELLO                                                                           │
+│                                                                                │
+│   *                                                                            │
+│IPC: ! A                                                                        │
+│                                                                                │
+│                ####                                                            │
+│                   #                                                            │
+│                   #                  *                                         │
+│                   ###                                                          │
+│                                                                                │
+│                                                                                │
+│                                                                                │
+│                                                                                │
+│                                                                                │
+│                                                                                │
+│                                                                                │
+│                                                                                │
+│                                                                                │
+│                                                                                │
+│                                                                                │
+│                                                                                │
+│                                                                                │
+│                                                                                │
+│                                                                                │
+│                                                                                │
+└────────────────────────────────────────────────────────────────────────────────┘</div><div class="grid two" style="margin-top:22px"><div class="card"><span class="tag data">Snake private RAM</span><pre>0–1     head cell
+2–3     tail ring-buffer index
+4–5     head ring-buffer index
+6–7     length
+8–9     food cell
+10      direction
+
+32+     body ring buffer
+        16-bit cell numbers</pre></div><div class="card"><span class="tag program">One game step</span><pre>read keyboard
+update direction
+calculate new head
+append head to ring buffer
+draw head
+
+if food:
+    length++
+    syscall RANDOM
+    place food
+else:
+    read tail from body
+    erase tail
+    advance tail index</pre></div></div></section>
+<section id="flow"><h2>12. End-to-end flows</h2><div class="grid two"><div class="card"><span class="tag disk">Launching /games/snake</span><pre>path
+ ↓
+filesystem.resolve()
+ ↓
+file-table entry
+ ↓
+disk.read(start,size)
+ ↓
+program bytes
+ ↓
+memory.loadProgram()
+ ↓
+allocate private data
+ ↓
+create PCB + PID
+ ↓
+process table
+ ↓
+scheduler
+ ↓
+CPU executes</pre></div><div class="card"><span class="tag device">Pressing ↑</span><pre>real keyboard
+ ↓
+Node stdin
+ ↓
+keyboard.js
+ ↓
+key code = UP
+ ↓
+LOAD 0xF800
+ ↓
+Snake changes direction
+ ↓
+new head
+ ↓
+STORE_AT framebuffer
+ ↓
+screen.js redraws</pre></div><div class="card"><span class="tag ipc">Blocking receive</span><pre>PID 4: RECEIVE
+ ↓
+mailbox empty
+ ↓
+state = blocked
+ ↓
+scheduler skips PID 4
+ ↓
+PID 5: SEND
+ ↓
+message queued
+ ↓
+PID 4 = ready
+ ↓
+next tick retries RECEIVE</pre></div><div class="card"><span class="tag kernel">HALT</span><pre>CPU sees HALT
+ ↓
+reports process exit
+ ↓
+scheduler → process.exit()
+ ↓
+free code block
+clear private data
+remove IPC mailbox
+remove PCB</pre></div></div></section>
+<section id="limits"><h2>13. Deliberate simplifications</h2><p class="intro">This is a real model of kernel ideas, not a production OS. The simplifications are what keep the mechanisms visible.</p><div class="grid two"><div class="card"><span class="tag kernel">Scheduler</span><ul class="notes"><li>Round-robin pass over the process table.</li><li>Fixed 56-instruction slice.</li><li>No priorities, multicore, or sophisticated fairness.</li><li>Timer uses JavaScript <code>setInterval</code>, not a hardware interrupt controller.</li></ul></div><div class="card"><span class="tag data">Memory</span><ul class="notes"><li>No paging or MMU page tables.</li><li>Program code: variable first-fit blocks.</li><li>Private data: fixed 60 KiB slots.</li><li>Process-visible addresses are translated in software.</li></ul></div><div class="card"><span class="tag disk">Filesystem</span><ul class="notes"><li>JSON metadata in first 1024 disk bytes.</li><li>Contiguous files; no block allocation or fragmentation.</li><li>No permissions, timestamps, links, cache, or journal.</li><li>Runtime file support is deliberately minimal.</li></ul></div><div class="card"><span class="tag device">Devices</span><ul class="notes"><li>Text framebuffer, one byte per character.</li><li>Keyboard keeps only the latest key code.</li><li>Programs may directly access MMIO.</li><li>No privilege rings, DMA, or device discovery.</li></ul></div><div class="card"><span class="tag ipc">IPC</span><ul class="notes"><li>One mailbox per process.</li><li>Message = sender PID + one 16-bit value.</li><li>No named ports, capacity limits, permissions, or backpressure.</li><li>Demo sender assumes receiver is PID 4.</li></ul></div><div class="card"><span class="tag kernel">Host boundary</span><ul class="notes"><li>Node executes the JavaScript kernel implementation.</li><li>The simulated CPU executes only our user-program machine code.</li><li><code>screen.js</code> and <code>keyboard.js</code> bridge to real terminal I/O.</li><li>The 64 KiB kernel RAM region is conceptual rather than literal executable JS bytes.</li></ul></div></div><div class="callout"><strong>These simplifications do not remove the core relationships.</strong> Programs live on disk, files have names and directories, programs become processes in RAM, the scheduler shares CPU time, syscalls enter kernel services, MMIO connects software to devices, blocked tasks stop running, and IPC lets isolated processes communicate.</div></section>
+<section><h2>14. The whole kernel in one diagram</h2><pre>                              ┌──────────────────────────────┐
+                              │          REAL MACHINE         │
+                              │ Linux terminal + Node.js      │
+                              └──────────────┬───────────────┘
+                                             │
+                    ┌────────────────────────┴────────────────────────┐
+                    │                                                 │
+          ┌─────────▼──────────┐                           ┌──────────▼─────────┐
+          │    keyboard.js     │                           │     screen.js      │
+          │ real keys → codes  │                           │ framebuffer → tty │
+          └─────────┬──────────┘                           └──────────▲─────────┘
+                    │ 0xF800                                  framebuffer
+                    │                                                 │
+┌───────────────────▼─────────────────────────────────────────────────┴───────────────────┐
+│                                  SIMULATED MACHINE                                      │
+│                                                                                         │
+│  ┌──────────────────────────────── KERNEL ────────────────────────────────────────────┐ │
+│  │ filesystem   process table   scheduler   memory manager   syscalls   IPC mailboxes │ │
+│  └──────┬──────────────┬────────────┬──────────────┬────────────┬───────────────┬──────┘ │
+│         │              │            │              │            │               │        │
+│         │              │            ▼              │            │               │        │
+│         │              │         ┌───────┐         │            │               │        │
+│         │              └────────►│  CPU  │◄────────┘            │               │        │
+│         │                        └───┬───┘                      │               │        │
+│         │                            │                          │               │        │
+│         │             ┌──────────────┼───────────────┐          │               │        │
+│         │             ▼              ▼               ▼          │               │        │
+│         │         /sbin/init    /bin/animate    /games/snake ◄─┘               │        │
+│         │                                             │                         │        │
+│  ┌──────▼──────────────┐                       ┌──────▼──────────────────────┐   │        │
+│  │      1 MiB DISK     │                       │          1 MiB RAM          │   │        │
+│  │ file table+programs │                       │ kernel/programs/data/MMIO  │   │        │
+│  └─────────────────────┘                       └─────────────────────────────┘   │        │
+└─────────────────────────────────────────────────────────────────────────────────────────┘</pre></section>
+<section><h2>15. What this kernel teaches</h2><p class="intro">Once a machine has a CPU, memory, storage, devices, and multiple programs, the core OS problems naturally appear. This project derives the major mechanisms directly from those problems instead of starting from textbook names.</p><div class="grid four"><div class="card"><strong>Execution</strong><p>Programs become processes with PID, registers, instruction pointer, and memory.</p></div><div class="card"><strong>Sharing</strong><p>The scheduler divides CPU execution among ready processes.</p></div><div class="card"><strong>Isolation</strong><p>Each process receives private data memory.</p></div><div class="card"><strong>Services</strong><p>Syscalls cross from programs into kernel-owned functionality.</p></div><div class="card"><strong>Persistence</strong><p>The filesystem gives raw disk bytes names and hierarchy.</p></div><div class="card"><strong>I/O</strong><p>MMIO connects programs to keyboard and framebuffer.</p></div><div class="card"><strong>Waiting</strong><p>Blocked processes stop consuming CPU until woken.</p></div><div class="card"><strong>Communication</strong><p>IPC lets isolated processes exchange messages through the kernel.</p></div></div></section>
+<footer class="footer"><strong>Tiny JavaScript Kernel — Architecture & Internals</strong><br>One-file documentation designed to make the machine visible: bytes on disk, bytes in RAM, CPU execution, process state, scheduling, syscalls, devices, and IPC.</footer>
+</div>
+</body>
+</html>
