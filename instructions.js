@@ -1,0 +1,13 @@
+export const opcode = {
+    MOV: 1,
+    LOAD: 2,
+    STORE: 3,
+    ADD: 4,
+    SUB: 5,
+    CMP: 6,
+    JMP: 7,
+    JE: 8,
+    JNE: 9,
+    SYSCALL: 10,
+    HALT: 11,
+}

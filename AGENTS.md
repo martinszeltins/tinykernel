@@ -1,4 +1,4 @@
-# Plan
+# General plan for our kernel. Very simple, yet all the main real kernel concepts.
 
 1. **Machine**
 
@@ -32,7 +32,7 @@
 
    * Kernel's collection of all processes
 
-6. **Scheduler**
+6. **Scheduler** (very basic scheduler)
 
    * Ready queue
    * Running process
@@ -54,7 +54,7 @@
    * File/device operations
    * IPC operations
 
-9. **Interprocess Communication**
+9. **Interprocess Communication** (very basic IPC)
 
    * Messages
    * Send
@@ -67,7 +67,7 @@
     * Read blocks
     * Write blocks
 
-11. **File System**
+11. **File System** (very basic file system)
 
     * Files
     * File names
@@ -75,19 +75,19 @@
     * File contents
     * Open/read/write/close
 
-12. **Devices / I/O**
+12. **Devices / I/O** (we can keep it simple, maybe we don't need this)
 
     * Simple console/output device
     * Input device
     * Device abstraction
 
-13. **Interrupts / Events**
+13. **Interrupts / Events** (maybe not needed)
 
     * Timer interrupt
     * I/O completion
     * Wake sleeping processes
 
-14. **Process Lifecycle**
+14. **Process Lifecycle** (maybe not needed)
 
     * Create
     * Ready
