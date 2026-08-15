@@ -1,5 +1,5 @@
 import { FRAMEBUFFER_ADDRESS, FRAMEBUFFER_HEIGHT, FRAMEBUFFER_WIDTH } from './memory.js'
-import { ADD, assemble, CMP, JE, JMP, JNE, LOAD16, MOV, NOP, R0, R1, R2, STORE, STORE16, STORE_AT, SYSCALL } from './asm.js'
+import { ADD, assemble, CMP, JE, JMP, JNE, LOAD16, MOD, MOV, NOP, R0, R1, R2, STORE, STORE16, STORE_AT, SUB, SYSCALL } from './asm.js'
 import { syscallNumber } from './syscall.js'
 
 /*
@@ -41,10 +41,6 @@ const initProgram = assemble(
 
 /*
     /bin/animate
-
-    Because our scheduler now gives 28 instructions
-    per time slice, add NOP instructions so this
-    animation does not suddenly become extremely fast.
 */
 
 const ANIMATION_ROW = 2
@@ -86,18 +82,21 @@ const animationProgram = assemble(...animationInstructions)
 /*
     /games/snake
 
-    Rows 0–4 are left available for HELLO and /bin/animate.
-
     Snake owns rows 5–24.
 
-    That gives us:
+    This gives it:
 
-        20 rows × 80 columns = 1600 cells
+        20 × 80 = 1600 cells
 
-    Food can appear randomly at ANY of those 1600 cells.
+    The snake travels through those cells in one
+    continuous circular path.
 
-    The snake continuously walks through all 1600 cells,
-    so every food location is eventually reachable.
+    Private process memory:
+
+        0–1    head
+        2–3    tail
+        4–5    food
+        6–7    length
 */
 
 const SNAKE_TOP_ROW = 5
@@ -108,30 +107,19 @@ const SNAKE_GAME_SIZE = FRAMEBUFFER_WIDTH * SNAKE_GAME_HEIGHT
 
 const snakeScreenStart = FRAMEBUFFER_ADDRESS + FRAMEBUFFER_WIDTH * SNAKE_TOP_ROW
 
-/*
-    Snake's private RAM.
-
-    These values need 16 bits because they can contain
-    positions from 0–1599.
-
-    0–1 = head
-    2–3 = tail
-    4–5 = food
-*/
 const HEAD = 0
 const TAIL = 2
 const FOOD = 4
+const LENGTH = 6
 
 /*
-    Since every instruction is exactly four bytes,
-    these values are byte offsets inside the program.
+    Every instruction is 4 bytes.
 
-    They behave like tiny assembly labels.
+    Main loop starts at instruction 27.
+    Food-eaten handler starts at instruction 53.
 */
-const SNAKE_LOOP = 18 * 4
-const HEAD_READY = 25 * 4
-const TAIL_READY = 41 * 4
-const FOOD_EATEN = 48 * 4
+const SNAKE_LOOP = 27 * 4
+const FOOD_EATEN = 53 * 4
 
 const snakeProgram = assemble(
     /*
@@ -149,6 +137,7 @@ const snakeProgram = assemble(
     /*
         head = 4
         tail = 0
+        length = 5
     */
     MOV(R0, SNAKE_LENGTH - 1),
     STORE16(R0, HEAD),
@@ -156,12 +145,42 @@ const snakeProgram = assemble(
     MOV(R0, 0),
     STORE16(R0, TAIL),
 
+    MOV(R0, SNAKE_LENGTH),
+    STORE16(R0, LENGTH),
+
     /*
-        Ask the kernel for a completely random cell
-        anywhere inside Snake's 1600-cell playfield.
+        Generate initial food.
+
+        freeCells = GAME_SIZE - length
+
+        random gives:
+            0 .. freeCells - 1
+
+        Add 1 so the food is always at least
+        one cell ahead of the head.
+
+        food =
+            (head + randomDistance) % GAME_SIZE
+
+        Because the snake body occupies the cells
+        behind the head, this guarantees that the
+        food cannot spawn inside the snake.
     */
     MOV(R0, SNAKE_GAME_SIZE),
+    LOAD16(R1, LENGTH),
+    SUB(R0, R1),
+
     SYSCALL(syscallNumber.RANDOM),
+
+    MOV(R1, 1),
+    ADD(R0, R1),
+
+    LOAD16(R1, HEAD),
+    ADD(R0, R1),
+
+    MOV(R1, SNAKE_GAME_SIZE),
+    MOD(R0, R1),
+
     STORE16(R0, FOOD),
 
     /*
@@ -173,8 +192,6 @@ const snakeProgram = assemble(
     MOV(R2, 42),
     STORE_AT(R2, R1),
 
-    NOP(),
-
     /*
         ========================================
         MAIN LOOP
@@ -182,31 +199,21 @@ const snakeProgram = assemble(
     */
 
     /*
-        head++
+        head =
+            (head + 1) % GAME_SIZE
     */
     LOAD16(R0, HEAD),
 
     MOV(R1, 1),
     ADD(R0, R1),
 
-    /*
-        Wrap after the last cell.
-
-        1599 → 0
-    */
     MOV(R1, SNAKE_GAME_SIZE),
-    CMP(R0, R1),
-    JNE(HEAD_READY),
+    MOD(R0, R1),
 
-    MOV(R0, 0),
-
-    /*
-        Save new head.
-    */
     STORE16(R0, HEAD),
 
     /*
-        Did the head land on food?
+        Did we eat the food?
     */
     LOAD16(R1, FOOD),
     CMP(R0, R1),
@@ -215,9 +222,13 @@ const snakeProgram = assemble(
     /*
         ========================================
         NORMAL MOVEMENT
-        ========================================
 
-        Erase tail.
+        Move the tail forward by one cell.
+        ========================================
+    */
+
+    /*
+        Erase current tail.
     */
     LOAD16(R0, TAIL),
 
@@ -228,7 +239,8 @@ const snakeProgram = assemble(
     STORE_AT(R2, R1),
 
     /*
-        tail++
+        tail =
+            (tail + 1) % GAME_SIZE
     */
     LOAD16(R0, TAIL),
 
@@ -236,10 +248,7 @@ const snakeProgram = assemble(
     ADD(R0, R1),
 
     MOV(R1, SNAKE_GAME_SIZE),
-    CMP(R0, R1),
-    JNE(TAIL_READY),
-
-    MOV(R0, 0),
+    MOD(R0, R1),
 
     STORE16(R0, TAIL),
 
@@ -261,12 +270,15 @@ const snakeProgram = assemble(
         FOOD EATEN
         ========================================
 
-        Draw the new head.
+        IMPORTANT:
 
-        We deliberately DO NOT move the tail.
+        We draw the new head but DO NOT move
+        the tail.
 
-        Therefore the snake becomes one cell longer.
+        That physically makes the snake one cell
+        longer on the framebuffer.
     */
+
     LOAD16(R0, HEAD),
 
     MOV(R1, snakeScreenStart),
@@ -276,10 +288,59 @@ const snakeProgram = assemble(
     STORE_AT(R2, R1),
 
     /*
-        Generate another random food position.
+        length++
+    */
+    LOAD16(R0, LENGTH),
+
+    MOV(R1, 1),
+    ADD(R0, R1),
+
+    STORE16(R0, LENGTH),
+
+    /*
+        If the snake somehow fills the entire
+        playfield, don't try to spawn more food.
+    */
+    MOV(R1, SNAKE_GAME_SIZE),
+    CMP(R0, R1),
+    JE(SNAKE_LOOP),
+
+    /*
+        Generate NEW food somewhere in the
+        remaining free part of the board.
+
+        freeCells = GAME_SIZE - length
     */
     MOV(R0, SNAKE_GAME_SIZE),
+
+    LOAD16(R1, LENGTH),
+    SUB(R0, R1),
+
+    /*
+        RANDOM returns:
+            0 .. freeCells - 1
+    */
     SYSCALL(syscallNumber.RANDOM),
+
+    /*
+        Convert that into:
+            1 .. freeCells
+    */
+    MOV(R1, 1),
+    ADD(R0, R1),
+
+    /*
+        Start counting from the current head.
+    */
+    LOAD16(R1, HEAD),
+    ADD(R0, R1),
+
+    /*
+        Wrap around the playfield.
+    */
+    MOV(R1, SNAKE_GAME_SIZE),
+    MOD(R0, R1),
+
     STORE16(R0, FOOD),
 
     /*

@@ -88,6 +88,12 @@ const run = (process, instructionCount) => {
             registers[a] -= registers[registerB]
         }
 
+        if (operation === opcode.MOD) {
+            const registerB = memory.read(instructionAddress + 2)
+
+            registers[a] %= registers[registerB]
+        }
+
         if (operation === opcode.CMP) {
             const registerB = memory.read(instructionAddress + 2)
 

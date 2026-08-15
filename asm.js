@@ -86,6 +86,15 @@ export const SUB = (registerA, registerB) => {
     ]
 }
 
+export const MOD = (registerA, registerB) => {
+    return [
+        opcode.MOD,
+        registerA,
+        registerB,
+        0,
+    ]
+}
+
 export const CMP = (registerA, registerB) => {
     return [
         opcode.CMP,
