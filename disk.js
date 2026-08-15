@@ -1,5 +1,5 @@
-import { FRAMEBUFFER_ADDRESS, FRAMEBUFFER_WIDTH } from './memory.js'
-import { ADD, assemble, CMP, JE, JMP, JNE, LOAD, MOV, R0, R1, R2, STORE, STORE_AT, SYSCALL } from './asm.js'
+import { FRAMEBUFFER_ADDRESS, FRAMEBUFFER_HEIGHT, FRAMEBUFFER_WIDTH } from './memory.js'
+import { ADD, assemble, CMP, JE, JMP, JNE, LOAD16, MOV, NOP, R0, R1, R2, STORE, STORE16, STORE_AT, SYSCALL } from './asm.js'
 import { syscallNumber } from './syscall.js'
 
 /*
@@ -18,9 +18,8 @@ const bytes = new Uint8Array(1024 * 1024)
 
 /*
     /sbin/init
-
-    Write HELLO to the first row and stay alive.
 */
+
 const initProgram = assemble(
     MOV(R0, 72),
     STORE(R0, FRAMEBUFFER_ADDRESS),
@@ -43,7 +42,9 @@ const initProgram = assemble(
 /*
     /bin/animate
 
-    Move "*" five positions right and back forever.
+    Because our scheduler now gives 28 instructions
+    per time slice, add NOP instructions so this
+    animation does not suddenly become extremely fast.
 */
 
 const ANIMATION_ROW = 2
@@ -53,27 +54,30 @@ const animationInstructions = [
     MOV(R0, 32),
     MOV(R1, 42),
     STORE(R1, animationStartAddress),
-    MOV(R2, 0),
 ]
 
-const ANIMATION_LOOP = 16
-
-for (let position = 1; position <= 5; position++) {
+const addAnimationStep = (oldPosition, newPosition) => {
     animationInstructions.push(
-        STORE(R0, animationStartAddress + position - 1),
-        STORE(R1, animationStartAddress + position)
+        STORE(R0, animationStartAddress + oldPosition),
+        STORE(R1, animationStartAddress + newPosition)
     )
+
+    for (let i = 0; i < 26; i++) {
+        animationInstructions.push(NOP())
+    }
 }
 
-for (let position = 4; position >= 0; position--) {
-    animationInstructions.push(
-        STORE(R0, animationStartAddress + position + 1),
-        STORE(R1, animationStartAddress + position)
-    )
+const ANIMATION_LOOP = animationInstructions.length * 4
+
+for (let position = 0; position < 5; position++) {
+    addAnimationStep(position, position + 1)
+}
+
+for (let position = 5; position > 0; position--) {
+    addAnimationStep(position, position - 1)
 }
 
 animationInstructions.push(
-    MOV(R2, 0),
     JMP(ANIMATION_LOOP)
 )
 
@@ -82,114 +86,115 @@ const animationProgram = assemble(...animationInstructions)
 /*
     /games/snake
 
-    Snake starts five characters long.
+    Rows 0–4 are left available for HELLO and /bin/animate.
 
-    It moves continuously to the right and wraps
-    around the screen.
+    Snake owns rows 5–24.
 
-    Food appears at a random position on the
-    snake's row.
+    That gives us:
 
-    When the head reaches the food:
-        - the tail is NOT erased
-        - the snake therefore grows by one
-        - new random food is created
+        20 rows × 80 columns = 1600 cells
 
-    Private process data:
+    Food can appear randomly at ANY of those 1600 cells.
 
-        0 = head position
-        1 = tail position
-        2 = food position
+    The snake continuously walks through all 1600 cells,
+    so every food location is eventually reachable.
 */
 
-const SNAKE_ROW = 5
+const SNAKE_TOP_ROW = 5
 const SNAKE_LENGTH = 5
 
-const HEAD = 0
-const TAIL = 1
-const FOOD = 2
+const SNAKE_GAME_HEIGHT = FRAMEBUFFER_HEIGHT - SNAKE_TOP_ROW
+const SNAKE_GAME_SIZE = FRAMEBUFFER_WIDTH * SNAKE_GAME_HEIGHT
 
-const snakeRowStart = FRAMEBUFFER_ADDRESS + FRAMEBUFFER_WIDTH * SNAKE_ROW
+const snakeScreenStart = FRAMEBUFFER_ADDRESS + FRAMEBUFFER_WIDTH * SNAKE_TOP_ROW
 
 /*
-    Because every instruction is exactly 4 bytes,
-    these are byte offsets into the Snake program.
+    Snake's private RAM.
 
-    They are our tiny equivalent of assembly labels.
+    These values need 16 bits because they can contain
+    positions from 0–1599.
+
+    0–1 = head
+    2–3 = tail
+    4–5 = food
 */
-const SNAKE_LOOP = 17 * 4
-const HEAD_READY = 24 * 4
-const TAIL_READY = 40 * 4
-const FOOD_EATEN = 47 * 4
+const HEAD = 0
+const TAIL = 2
+const FOOD = 4
+
+/*
+    Since every instruction is exactly four bytes,
+    these values are byte offsets inside the program.
+
+    They behave like tiny assembly labels.
+*/
+const SNAKE_LOOP = 18 * 4
+const HEAD_READY = 25 * 4
+const TAIL_READY = 41 * 4
+const FOOD_EATEN = 48 * 4
 
 const snakeProgram = assemble(
     /*
-        Draw initial five-character snake:
+        Initial snake:
 
         #####
     */
     MOV(R0, 35),
-    STORE(R0, snakeRowStart),
-    STORE(R0, snakeRowStart + 1),
-    STORE(R0, snakeRowStart + 2),
-    STORE(R0, snakeRowStart + 3),
-    STORE(R0, snakeRowStart + 4),
+    STORE(R0, snakeScreenStart),
+    STORE(R0, snakeScreenStart + 1),
+    STORE(R0, snakeScreenStart + 2),
+    STORE(R0, snakeScreenStart + 3),
+    STORE(R0, snakeScreenStart + 4),
 
     /*
         head = 4
         tail = 0
     */
     MOV(R0, SNAKE_LENGTH - 1),
-    STORE(R0, HEAD),
+    STORE16(R0, HEAD),
 
     MOV(R0, 0),
-    STORE(R0, TAIL),
+    STORE16(R0, TAIL),
 
     /*
-        Ask the kernel for a random column.
-
-        R0 = 80
-        SYSCALL RANDOM
-        R0 = random value 0–79
+        Ask the kernel for a completely random cell
+        anywhere inside Snake's 1600-cell playfield.
     */
-    MOV(R0, FRAMEBUFFER_WIDTH),
+    MOV(R0, SNAKE_GAME_SIZE),
     SYSCALL(syscallNumber.RANDOM),
-    STORE(R0, FOOD),
+    STORE16(R0, FOOD),
 
     /*
-        Draw the initial food.
-
-        R1 = framebuffer row start + random column
-        R2 = "*"
+        Draw food.
     */
-    MOV(R1, snakeRowStart),
+    MOV(R1, snakeScreenStart),
     ADD(R1, R0),
 
     MOV(R2, 42),
     STORE_AT(R2, R1),
 
+    NOP(),
+
     /*
-        ==============================
-        MAIN SNAKE LOOP
-        ==============================
+        ========================================
+        MAIN LOOP
+        ========================================
     */
 
     /*
         head++
     */
-    LOAD(R0, HEAD),
+    LOAD16(R0, HEAD),
+
     MOV(R1, 1),
     ADD(R0, R1),
 
     /*
-        Wrap:
+        Wrap after the last cell.
 
-        if head != 80
-            continue
-
-        head = 0
+        1599 → 0
     */
-    MOV(R1, FRAMEBUFFER_WIDTH),
+    MOV(R1, SNAKE_GAME_SIZE),
     CMP(R0, R1),
     JNE(HEAD_READY),
 
@@ -198,25 +203,25 @@ const snakeProgram = assemble(
     /*
         Save new head.
     */
-    STORE(R0, HEAD),
+    STORE16(R0, HEAD),
 
     /*
-        Did the new head reach the food?
+        Did the head land on food?
     */
-    LOAD(R1, FOOD),
+    LOAD16(R1, FOOD),
     CMP(R0, R1),
     JE(FOOD_EATEN),
 
     /*
-        ==============================
+        ========================================
         NORMAL MOVEMENT
-        ==============================
+        ========================================
 
-        Erase the old tail.
+        Erase tail.
     */
-    LOAD(R0, TAIL),
+    LOAD16(R0, TAIL),
 
-    MOV(R1, snakeRowStart),
+    MOV(R1, snakeScreenStart),
     ADD(R1, R0),
 
     MOV(R2, 32),
@@ -225,27 +230,25 @@ const snakeProgram = assemble(
     /*
         tail++
     */
-    LOAD(R0, TAIL),
+    LOAD16(R0, TAIL),
+
     MOV(R1, 1),
     ADD(R0, R1),
 
-    /*
-        Wrap tail at screen edge.
-    */
-    MOV(R1, FRAMEBUFFER_WIDTH),
+    MOV(R1, SNAKE_GAME_SIZE),
     CMP(R0, R1),
     JNE(TAIL_READY),
 
     MOV(R0, 0),
 
-    STORE(R0, TAIL),
+    STORE16(R0, TAIL),
 
     /*
-        Draw the new head.
+        Draw new head.
     */
-    LOAD(R0, HEAD),
+    LOAD16(R0, HEAD),
 
-    MOV(R1, snakeRowStart),
+    MOV(R1, snakeScreenStart),
     ADD(R1, R0),
 
     MOV(R2, 35),
@@ -254,34 +257,35 @@ const snakeProgram = assemble(
     JMP(SNAKE_LOOP),
 
     /*
-        ==============================
+        ========================================
         FOOD EATEN
-        ==============================
+        ========================================
 
-        Draw the new head, but DO NOT erase
-        or advance the tail.
+        Draw the new head.
 
-        That makes the snake one character longer.
+        We deliberately DO NOT move the tail.
+
+        Therefore the snake becomes one cell longer.
     */
-    LOAD(R0, HEAD),
+    LOAD16(R0, HEAD),
 
-    MOV(R1, snakeRowStart),
+    MOV(R1, snakeScreenStart),
     ADD(R1, R0),
 
     MOV(R2, 35),
     STORE_AT(R2, R1),
 
     /*
-        Ask kernel for another random food position.
+        Generate another random food position.
     */
-    MOV(R0, FRAMEBUFFER_WIDTH),
+    MOV(R0, SNAKE_GAME_SIZE),
     SYSCALL(syscallNumber.RANDOM),
-    STORE(R0, FOOD),
+    STORE16(R0, FOOD),
 
     /*
-        Draw the new food.
+        Draw new food.
     */
-    MOV(R1, snakeRowStart),
+    MOV(R1, snakeScreenStart),
     ADD(R1, R0),
 
     MOV(R2, 42),
@@ -291,7 +295,7 @@ const snakeProgram = assemble(
 )
 
 /*
-    Physical locations of files on disk.
+    Physical files on disk.
 */
 
 const INIT_START = 1024

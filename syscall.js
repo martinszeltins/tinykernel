@@ -3,11 +3,13 @@ export const syscallNumber = {
 }
 
 /*
-    Handle requests from user programs into the kernel.
+    RANDOM
 
-    RANDOM:
-        R0 contains the maximum value.
-        R0 receives the random result.
+    Input:
+        R0 = maximum
+
+    Output:
+        R0 = random number from 0 to maximum - 1
 */
 const handle = (process, number) => {
     if (number === syscallNumber.RANDOM) {

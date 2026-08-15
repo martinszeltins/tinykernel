@@ -5,17 +5,6 @@ export const R1 = 1
 export const R2 = 2
 export const R3 = 3
 
-/*
-    Convert a 16-bit number into two bytes.
-
-    Example:
-
-    1000 → [232, 3]
-
-    because:
-
-    232 + (3 × 256) = 1000
-*/
 const word = value => [
     value & 0xff,
     (value >> 8) & 0xff,
@@ -40,6 +29,22 @@ export const LOAD = (register, offset) => {
 export const STORE = (register, offset) => {
     return [
         opcode.STORE,
+        register,
+        ...word(offset),
+    ]
+}
+
+export const LOAD16 = (register, offset) => {
+    return [
+        opcode.LOAD16,
+        register,
+        ...word(offset),
+    ]
+}
+
+export const STORE16 = (register, offset) => {
+    return [
+        opcode.STORE16,
         register,
         ...word(offset),
     ]
@@ -137,6 +142,15 @@ export const SYSCALL = number => {
 export const HALT = () => {
     return [
         opcode.HALT,
+        0,
+        0,
+        0,
+    ]
+}
+
+export const NOP = () => {
+    return [
+        opcode.NOP,
         0,
         0,
         0,

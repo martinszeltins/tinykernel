@@ -12,4 +12,7 @@ export const opcode = {
     HALT: 11,
     LOAD_AT: 12,
     STORE_AT: 13,
+    LOAD16: 14,
+    STORE16: 15,
+    NOP: 16,
 }

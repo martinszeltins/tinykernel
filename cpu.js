@@ -1,5 +1,5 @@
-import { opcode } from './instructions.js'
 import { memory } from './memory.js'
+import { opcode } from './instructions.js'
 import { syscall } from './syscall.js'
 
 const INSTRUCTION_SIZE = 4
@@ -9,6 +9,18 @@ const read16 = address => {
     const high = memory.read(address + 1)
 
     return low + high * 256
+}
+
+const readProcess16 = (process, address) => {
+    const low = memory.readProcess(process, address)
+    const high = memory.readProcess(process, address + 1)
+
+    return low + high * 256
+}
+
+const writeProcess16 = (process, address, value) => {
+    memory.writeProcess(process, address, value & 0xff)
+    memory.writeProcess(process, address + 1, (value >> 8) & 0xff)
 }
 
 const run = (process, instructionCount) => {
@@ -38,10 +50,18 @@ const run = (process, instructionCount) => {
             memory.writeProcess(process, address, registers[a])
         }
 
-        /*
-            The memory address itself is stored
-            inside another register.
-        */
+        if (operation === opcode.LOAD16) {
+            const address = read16(instructionAddress + 2)
+
+            registers[a] = readProcess16(process, address)
+        }
+
+        if (operation === opcode.STORE16) {
+            const address = read16(instructionAddress + 2)
+
+            writeProcess16(process, address, registers[a])
+        }
+
         if (operation === opcode.LOAD_AT) {
             const addressRegister = memory.read(instructionAddress + 2)
             const address = registers[addressRegister]
