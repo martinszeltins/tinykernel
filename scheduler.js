@@ -1,7 +1,7 @@
 import { cpu } from './cpu.js'
 import { process } from './process.js'
 
-const TIME_SLICE = 28
+const TIME_SLICE = 56
 
 /**
  * Simple round-robin scheduler.

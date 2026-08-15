@@ -1,18 +1,7 @@
-import { FRAMEBUFFER_ADDRESS, FRAMEBUFFER_HEIGHT, FRAMEBUFFER_WIDTH } from './memory.js'
-import { ADD, assemble, CMP, JE, JMP, JNE, LOAD16, MOD, MOV, NOP, R0, R1, R2, STORE, STORE16, STORE_AT, SUB, SYSCALL } from './asm.js'
+import { FRAMEBUFFER_ADDRESS, FRAMEBUFFER_HEIGHT, FRAMEBUFFER_WIDTH, KEYBOARD_ADDRESS } from './memory.js'
+import { ADD, assemble, CMP, JE, JMP, JNE, LABEL, LOAD, LOAD16, LOAD16_AT, LOAD_AT, MOD, MOV, NOP, R0, R1, R2, R3, STORE, STORE16, STORE16_AT, STORE_AT, SUB, SYSCALL } from './asm.js'
+import { keyboardCode } from './keyboard.js'
 import { syscallNumber } from './syscall.js'
-
-/*
-    DISK — 1 MiB
-
-    0 ─────────────────────────────────────
-        FILE TABLE
-
-    1024 ──────────────────────────────────
-        /sbin/init
-        /bin/animate
-        /games/snake
-*/
 
 const bytes = new Uint8Array(1024 * 1024)
 
@@ -58,7 +47,12 @@ const addAnimationStep = (oldPosition, newPosition) => {
         STORE(R1, animationStartAddress + newPosition)
     )
 
-    for (let i = 0; i < 26; i++) {
+    /*
+        Scheduler now gives 56 instructions.
+
+        Keep /bin/animate at roughly its old speed.
+    */
+    for (let i = 0; i < 54; i++) {
         animationInstructions.push(NOP())
     }
 }
@@ -84,42 +78,36 @@ const animationProgram = assemble(...animationInstructions)
 
     Snake owns rows 5–24.
 
-    This gives it:
+    20 rows × 80 columns = 1600 cells.
 
-        20 × 80 = 1600 cells
+    Private Snake memory:
 
-    The snake travels through those cells in one
-    continuous circular path.
+    0–1     head cell
+    2–3     tail ring-buffer index
+    4–5     head ring-buffer index
+    6–7     length
+    8–9     food cell
+    10      direction
 
-    Private process memory:
+    32+     body ring buffer
 
-        0–1    head
-        2–3    tail
-        4–5    food
-        6–7    length
+    Every body entry is a 16-bit cell number.
 */
 
 const SNAKE_TOP_ROW = 5
-const SNAKE_LENGTH = 5
-
 const SNAKE_GAME_HEIGHT = FRAMEBUFFER_HEIGHT - SNAKE_TOP_ROW
 const SNAKE_GAME_SIZE = FRAMEBUFFER_WIDTH * SNAKE_GAME_HEIGHT
 
 const snakeScreenStart = FRAMEBUFFER_ADDRESS + FRAMEBUFFER_WIDTH * SNAKE_TOP_ROW
 
 const HEAD = 0
-const TAIL = 2
-const FOOD = 4
+const TAIL_INDEX = 2
+const HEAD_INDEX = 4
 const LENGTH = 6
+const FOOD = 8
+const DIRECTION = 10
 
-/*
-    Every instruction is 4 bytes.
-
-    Main loop starts at instruction 27.
-    Food-eaten handler starts at instruction 53.
-*/
-const SNAKE_LOOP = 27 * 4
-const FOOD_EATEN = 53 * 4
+const BODY_START = 32
 
 const snakeProgram = assemble(
     /*
@@ -127,7 +115,9 @@ const snakeProgram = assemble(
 
         #####
     */
+
     MOV(R0, 35),
+
     STORE(R0, snakeScreenStart),
     STORE(R0, snakeScreenStart + 1),
     STORE(R0, snakeScreenStart + 2),
@@ -135,102 +125,368 @@ const snakeProgram = assemble(
     STORE(R0, snakeScreenStart + 4),
 
     /*
-        head = 4
-        tail = 0
-        length = 5
+        Body ring buffer:
+
+        [0, 1, 2, 3, 4]
     */
-    MOV(R0, SNAKE_LENGTH - 1),
+
+    MOV(R0, 0),
+    STORE16(R0, BODY_START),
+
+    MOV(R0, 1),
+    STORE16(R0, BODY_START + 2),
+
+    MOV(R0, 2),
+    STORE16(R0, BODY_START + 4),
+
+    MOV(R0, 3),
+    STORE16(R0, BODY_START + 6),
+
+    MOV(R0, 4),
+    STORE16(R0, BODY_START + 8),
+
+    /*
+        Initial state.
+    */
+
+    MOV(R0, 4),
     STORE16(R0, HEAD),
 
     MOV(R0, 0),
-    STORE16(R0, TAIL),
+    STORE16(R0, TAIL_INDEX),
 
-    MOV(R0, SNAKE_LENGTH),
+    MOV(R0, 4),
+    STORE16(R0, HEAD_INDEX),
+
+    MOV(R0, 5),
     STORE16(R0, LENGTH),
 
+    MOV(R0, keyboardCode.RIGHT),
+    STORE(R0, DIRECTION),
+
+    JMP('snake_generate_food'),
+
     /*
-        Generate initial food.
-
-        freeCells = GAME_SIZE - length
-
-        random gives:
-            0 .. freeCells - 1
-
-        Add 1 so the food is always at least
-        one cell ahead of the head.
-
-        food =
-            (head + randomDistance) % GAME_SIZE
-
-        Because the snake body occupies the cells
-        behind the head, this guarantees that the
-        food cannot spawn inside the snake.
+        ========================================
+        MAIN GAME LOOP
+        ========================================
     */
-    MOV(R0, SNAKE_GAME_SIZE),
-    LOAD16(R1, LENGTH),
-    SUB(R0, R1),
 
-    SYSCALL(syscallNumber.RANDOM),
+    LABEL('snake_loop'),
 
-    MOV(R1, 1),
-    ADD(R0, R1),
+    /*
+        Read the memory-mapped keyboard register.
 
-    LOAD16(R1, HEAD),
+        0 = no key
+        1 = up
+        2 = right
+        3 = down
+        4 = left
+    */
+
+    LOAD(R0, KEYBOARD_ADDRESS),
+
+    MOV(R1, keyboardCode.NONE),
+    CMP(R0, R1),
+    JE('snake_move'),
+
+    /*
+        UP
+
+        Ignore an immediate reversal from DOWN.
+    */
+
+    MOV(R1, keyboardCode.UP),
+    CMP(R0, R1),
+    JNE('snake_check_right'),
+
+    LOAD(R1, DIRECTION),
+    MOV(R2, keyboardCode.DOWN),
+    CMP(R1, R2),
+    JE('snake_move'),
+
+    MOV(R0, keyboardCode.UP),
+    STORE(R0, DIRECTION),
+    JMP('snake_move'),
+
+    /*
+        RIGHT
+    */
+
+    LABEL('snake_check_right'),
+
+    MOV(R1, keyboardCode.RIGHT),
+    CMP(R0, R1),
+    JNE('snake_check_down'),
+
+    LOAD(R1, DIRECTION),
+    MOV(R2, keyboardCode.LEFT),
+    CMP(R1, R2),
+    JE('snake_move'),
+
+    MOV(R0, keyboardCode.RIGHT),
+    STORE(R0, DIRECTION),
+    JMP('snake_move'),
+
+    /*
+        DOWN
+    */
+
+    LABEL('snake_check_down'),
+
+    MOV(R1, keyboardCode.DOWN),
+    CMP(R0, R1),
+    JNE('snake_check_left'),
+
+    LOAD(R1, DIRECTION),
+    MOV(R2, keyboardCode.UP),
+    CMP(R1, R2),
+    JE('snake_move'),
+
+    MOV(R0, keyboardCode.DOWN),
+    STORE(R0, DIRECTION),
+    JMP('snake_move'),
+
+    /*
+        LEFT
+    */
+
+    LABEL('snake_check_left'),
+
+    MOV(R1, keyboardCode.LEFT),
+    CMP(R0, R1),
+    JNE('snake_move'),
+
+    LOAD(R1, DIRECTION),
+    MOV(R2, keyboardCode.RIGHT),
+    CMP(R1, R2),
+    JE('snake_move'),
+
+    MOV(R0, keyboardCode.LEFT),
+    STORE(R0, DIRECTION),
+
+    /*
+        ========================================
+        CALCULATE NEW HEAD
+        ========================================
+    */
+
+    LABEL('snake_move'),
+
+    LOAD16(R0, HEAD),
+    LOAD(R1, DIRECTION),
+
+    MOV(R2, keyboardCode.UP),
+    CMP(R1, R2),
+    JE('snake_move_up'),
+
+    MOV(R2, keyboardCode.RIGHT),
+    CMP(R1, R2),
+    JE('snake_move_right'),
+
+    MOV(R2, keyboardCode.DOWN),
+    CMP(R1, R2),
+    JE('snake_move_down'),
+
+    JMP('snake_move_left'),
+
+    /*
+        UP
+
+        Adding GAME_SIZE - WIDTH and then modulo
+        GAME_SIZE wraps from the top to the bottom.
+    */
+
+    LABEL('snake_move_up'),
+
+    MOV(R1, SNAKE_GAME_SIZE - FRAMEBUFFER_WIDTH),
     ADD(R0, R1),
 
     MOV(R1, SNAKE_GAME_SIZE),
     MOD(R0, R1),
 
-    STORE16(R0, FOOD),
+    JMP('snake_head_ready'),
 
     /*
-        Draw food.
+        DOWN
     */
+
+    LABEL('snake_move_down'),
+
+    MOV(R1, FRAMEBUFFER_WIDTH),
+    ADD(R0, R1),
+
+    MOV(R1, SNAKE_GAME_SIZE),
+    MOD(R0, R1),
+
+    JMP('snake_head_ready'),
+
+    /*
+        RIGHT
+    */
+
+    LABEL('snake_move_right'),
+
+    /*
+        R2 = current column
+    */
+
+    MOV(R2, 0),
+    ADD(R2, R0),
+
+    MOV(R3, FRAMEBUFFER_WIDTH),
+    MOD(R2, R3),
+
+    /*
+        Normally head++.
+    */
+
+    MOV(R3, 1),
+    ADD(R0, R3),
+
+    /*
+        If we were at column 79, subtract 80 so
+        we wrap to column 0 of the same row.
+    */
+
+    MOV(R3, FRAMEBUFFER_WIDTH - 1),
+    CMP(R2, R3),
+    JNE('snake_head_ready'),
+
+    MOV(R3, FRAMEBUFFER_WIDTH),
+    SUB(R0, R3),
+
+    JMP('snake_head_ready'),
+
+    /*
+        LEFT
+    */
+
+    LABEL('snake_move_left'),
+
+    MOV(R2, 0),
+    ADD(R2, R0),
+
+    MOV(R3, FRAMEBUFFER_WIDTH),
+    MOD(R2, R3),
+
+    /*
+        Normally head--.
+    */
+
+    MOV(R3, 1),
+    SUB(R0, R3),
+
+    /*
+        If we were at column 0, add 80 so we wrap
+        to column 79 of the same row.
+    */
+
+    MOV(R3, 0),
+    CMP(R2, R3),
+    JNE('snake_head_ready'),
+
+    MOV(R3, FRAMEBUFFER_WIDTH),
+    ADD(R0, R3),
+
+    /*
+        ========================================
+        SAVE NEW HEAD
+        ========================================
+    */
+
+    LABEL('snake_head_ready'),
+
+    STORE16(R0, HEAD),
+
+    /*
+        Advance head ring-buffer index.
+
+        headIndex =
+            (headIndex + 1) % GAME_SIZE
+    */
+
+    LOAD16(R1, HEAD_INDEX),
+
+    MOV(R2, 1),
+    ADD(R1, R2),
+
+    MOV(R2, SNAKE_GAME_SIZE),
+    MOD(R1, R2),
+
+    STORE16(R1, HEAD_INDEX),
+
+    /*
+        Calculate:
+
+            BODY_START + headIndex * 2
+
+        R2 becomes the address of the new
+        ring-buffer entry.
+    */
+
+    MOV(R2, 0),
+    ADD(R2, R1),
+    ADD(R2, R1),
+
+    MOV(R3, BODY_START),
+    ADD(R2, R3),
+
+    /*
+        Store the new head cell into the body array.
+    */
+
+    STORE16_AT(R0, R2),
+
+    /*
+        Draw the new head.
+    */
+
     MOV(R1, snakeScreenStart),
     ADD(R1, R0),
 
-    MOV(R2, 42),
+    MOV(R2, 35),
     STORE_AT(R2, R1),
-
-    /*
-        ========================================
-        MAIN LOOP
-        ========================================
-    */
-
-    /*
-        head =
-            (head + 1) % GAME_SIZE
-    */
-    LOAD16(R0, HEAD),
-
-    MOV(R1, 1),
-    ADD(R0, R1),
-
-    MOV(R1, SNAKE_GAME_SIZE),
-    MOD(R0, R1),
-
-    STORE16(R0, HEAD),
 
     /*
         Did we eat the food?
     */
+
     LOAD16(R1, FOOD),
     CMP(R0, R1),
-    JE(FOOD_EATEN),
+    JE('snake_food_eaten'),
 
     /*
         ========================================
         NORMAL MOVEMENT
 
-        Move the tail forward by one cell.
+        Remove old tail.
         ========================================
     */
 
+    LOAD16(R1, TAIL_INDEX),
+
     /*
-        Erase current tail.
+        R2 =
+            BODY_START + tailIndex * 2
     */
-    LOAD16(R0, TAIL),
+
+    MOV(R2, 0),
+    ADD(R2, R1),
+    ADD(R2, R1),
+
+    MOV(R3, BODY_START),
+    ADD(R2, R3),
+
+    /*
+        R0 = old tail cell
+    */
+
+    LOAD16_AT(R0, R2),
+
+    /*
+        Erase tail from framebuffer.
+    */
 
     MOV(R1, snakeScreenStart),
     ADD(R1, R0),
@@ -239,10 +495,10 @@ const snakeProgram = assemble(
     STORE_AT(R2, R1),
 
     /*
-        tail =
-            (tail + 1) % GAME_SIZE
+        Advance tail ring-buffer index.
     */
-    LOAD16(R0, TAIL),
+
+    LOAD16(R0, TAIL_INDEX),
 
     MOV(R1, 1),
     ADD(R0, R1),
@@ -250,46 +506,23 @@ const snakeProgram = assemble(
     MOV(R1, SNAKE_GAME_SIZE),
     MOD(R0, R1),
 
-    STORE16(R0, TAIL),
+    STORE16(R0, TAIL_INDEX),
 
-    /*
-        Draw new head.
-    */
-    LOAD16(R0, HEAD),
-
-    MOV(R1, snakeScreenStart),
-    ADD(R1, R0),
-
-    MOV(R2, 35),
-    STORE_AT(R2, R1),
-
-    JMP(SNAKE_LOOP),
+    JMP('snake_loop'),
 
     /*
         ========================================
         FOOD EATEN
+
+        Don't move the tail.
+
+        Therefore the newly-added head remains,
+        making the snake one cell longer.
         ========================================
-
-        IMPORTANT:
-
-        We draw the new head but DO NOT move
-        the tail.
-
-        That physically makes the snake one cell
-        longer on the framebuffer.
     */
 
-    LOAD16(R0, HEAD),
+    LABEL('snake_food_eaten'),
 
-    MOV(R1, snakeScreenStart),
-    ADD(R1, R0),
-
-    MOV(R2, 35),
-    STORE_AT(R2, R1),
-
-    /*
-        length++
-    */
     LOAD16(R0, LENGTH),
 
     MOV(R1, 1),
@@ -298,65 +531,68 @@ const snakeProgram = assemble(
     STORE16(R0, LENGTH),
 
     /*
-        If the snake somehow fills the entire
-        playfield, don't try to spawn more food.
+        If the snake fills the entire playfield,
+        there is nowhere left to put food.
     */
+
     MOV(R1, SNAKE_GAME_SIZE),
     CMP(R0, R1),
-    JE(SNAKE_LOOP),
+    JE('snake_loop'),
 
     /*
-        Generate NEW food somewhere in the
-        remaining free part of the board.
+        ========================================
+        GENERATE RANDOM FOOD
 
-        freeCells = GAME_SIZE - length
+        Keep trying until we find a framebuffer
+        cell that is not occupied by '#'.
+        ========================================
     */
+
+    LABEL('snake_generate_food'),
+
     MOV(R0, SNAKE_GAME_SIZE),
-
-    LOAD16(R1, LENGTH),
-    SUB(R0, R1),
-
-    /*
-        RANDOM returns:
-            0 .. freeCells - 1
-    */
     SYSCALL(syscallNumber.RANDOM),
 
     /*
-        Convert that into:
-            1 .. freeCells
+        Convert game cell to framebuffer address.
     */
-    MOV(R1, 1),
-    ADD(R0, R1),
+
+    MOV(R1, snakeScreenStart),
+    ADD(R1, R0),
 
     /*
-        Start counting from the current head.
+        What's currently on that screen cell?
     */
-    LOAD16(R1, HEAD),
-    ADD(R0, R1),
+
+    LOAD_AT(R2, R1),
 
     /*
-        Wrap around the playfield.
+        If it contains '#', that's part of the
+        snake. Try another random cell.
     */
-    MOV(R1, SNAKE_GAME_SIZE),
-    MOD(R0, R1),
+
+    MOV(R3, 35),
+    CMP(R2, R3),
+    JE('snake_generate_food'),
+
+    /*
+        Save food cell.
+    */
 
     STORE16(R0, FOOD),
 
     /*
-        Draw new food.
+        Draw '*'.
     */
-    MOV(R1, snakeScreenStart),
-    ADD(R1, R0),
 
     MOV(R2, 42),
     STORE_AT(R2, R1),
 
-    JMP(SNAKE_LOOP)
+    JMP('snake_loop')
 )
 
 /*
-    Physical files on disk.
+    Filesystem.
 */
 
 const INIT_START = 1024

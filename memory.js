@@ -1,25 +1,21 @@
+import { keyboard } from './keyboard.js'
+
 /*
     1 MiB RAM
 
+    PHYSICAL RAM
+
     0 ─────────────────────────────────────
         KERNEL
-        64 KiB
 
     65536 ─────────────────────────────────
         PROGRAMS
-        448 KiB
 
     524288 ────────────────────────────────
         PROCESS DATA
 
-        Each process gets its own private
-        fixed-size data region.
-
     ───────────────────────────────────────
         FRAMEBUFFER
-
-        80 × 25 characters
-        2000 bytes
 
     1048576 ───────────────────────────────
 
@@ -31,6 +27,9 @@
 
     0xF000 ────────────────────────────────
         framebuffer
+
+    0xF800 ────────────────────────────────
+        keyboard register
 */
 
 const RAM_SIZE = 1024 * 1024
@@ -40,28 +39,17 @@ const KERNEL_SIZE = 64 * 1024
 const PROGRAM_AREA_START = KERNEL_SIZE
 const PROGRAM_AREA_SIZE = 448 * 1024
 
-const DATA_AREA_START =
-    PROGRAM_AREA_START +
-    PROGRAM_AREA_SIZE
+const DATA_AREA_START = PROGRAM_AREA_START + PROGRAM_AREA_SIZE
 
 export const FRAMEBUFFER_ADDRESS = 0xf000
 export const FRAMEBUFFER_WIDTH = 80
 export const FRAMEBUFFER_HEIGHT = 25
 
-const FRAMEBUFFER_SIZE =
-    FRAMEBUFFER_WIDTH *
-    FRAMEBUFFER_HEIGHT
+export const KEYBOARD_ADDRESS = 0xf800
 
-const FRAMEBUFFER_START =
-    RAM_SIZE -
-    FRAMEBUFFER_SIZE
+const FRAMEBUFFER_SIZE = FRAMEBUFFER_WIDTH * FRAMEBUFFER_HEIGHT
+const FRAMEBUFFER_START = RAM_SIZE - FRAMEBUFFER_SIZE
 
-/*
-    Addresses 0x0000–0xEFFF belong to the
-    process's private data.
-
-    0xF000 and above are reserved for devices.
-*/
 const DATA_SIZE_PER_PROCESS = FRAMEBUFFER_ADDRESS
 
 const bytes = new Uint8Array(RAM_SIZE)
@@ -92,74 +80,52 @@ const write = (address, value) => {
 }
 
 /*
-    Read from an address as seen by a process.
+    Read an address as seen by a process.
 
-    Normal addresses point into that process's
-    private data region.
-
-    Addresses beginning at 0xF000 point to the
-    shared framebuffer.
+    0xF800        → keyboard hardware
+    0xF000...     → framebuffer hardware
+    everything else → private process memory
 */
 const readProcess = (process, address) => {
+    if (address === KEYBOARD_ADDRESS) {
+        return keyboard.read()
+    }
+
     if (
         address >= FRAMEBUFFER_ADDRESS &&
         address < FRAMEBUFFER_ADDRESS + FRAMEBUFFER_SIZE
     ) {
-        const framebufferOffset =
-            address - FRAMEBUFFER_ADDRESS
+        const framebufferOffset = address - FRAMEBUFFER_ADDRESS
 
-        return bytes[
-            FRAMEBUFFER_START +
-            framebufferOffset
-        ]
+        return bytes[FRAMEBUFFER_START + framebufferOffset]
     }
 
     if (address < process.dataSize) {
-        return bytes[
-            process.dataStart +
-            address
-        ]
+        return bytes[process.dataStart + address]
     }
 
     return 0
 }
 
-/*
-    Same idea as readProcess(), but for writing.
-*/
 const writeProcess = (process, address, value) => {
     if (
         address >= FRAMEBUFFER_ADDRESS &&
         address < FRAMEBUFFER_ADDRESS + FRAMEBUFFER_SIZE
     ) {
-        const framebufferOffset =
-            address - FRAMEBUFFER_ADDRESS
+        const framebufferOffset = address - FRAMEBUFFER_ADDRESS
 
-        bytes[
-            FRAMEBUFFER_START +
-            framebufferOffset
-        ] = value
+        bytes[FRAMEBUFFER_START + framebufferOffset] = value
 
         return
     }
 
     if (address < process.dataSize) {
-        bytes[
-            process.dataStart +
-            address
-        ] = value
+        bytes[process.dataStart + address] = value
     }
 }
 
-/*
-    Used by our real terminal monitor to inspect
-    the simulated framebuffer.
-*/
 const readFramebuffer = offset => {
-    return bytes[
-        FRAMEBUFFER_START +
-        offset
-    ]
+    return bytes[FRAMEBUFFER_START + offset]
 }
 
 const loadProgram = program => {
@@ -190,9 +156,7 @@ const freeProgram = (start, size) => {
         size,
     })
 
-    freeProgramBlocks.sort(
-        (first, second) => first.start - second.start
-    )
+    freeProgramBlocks.sort((first, second) => first.start - second.start)
 
     for (let i = 0; i < freeProgramBlocks.length - 1; i++) {
         const current = freeProgramBlocks[i]

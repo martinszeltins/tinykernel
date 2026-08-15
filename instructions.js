@@ -16,4 +16,6 @@ export const opcode = {
     STORE16: 15,
     NOP: 16,
     MOD: 17,
+    LOAD16_AT: 18,
+    STORE16_AT: 19,
 }

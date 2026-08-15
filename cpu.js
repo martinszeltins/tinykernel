@@ -33,9 +33,7 @@ const run = (process, instructionCount) => {
         const registers = process.registers
 
         if (operation === opcode.MOV) {
-            const value = read16(instructionAddress + 2)
-
-            registers[a] = value
+            registers[a] = read16(instructionAddress + 2)
         }
 
         if (operation === opcode.LOAD) {
@@ -64,16 +62,40 @@ const run = (process, instructionCount) => {
 
         if (operation === opcode.LOAD_AT) {
             const addressRegister = memory.read(instructionAddress + 2)
-            const address = registers[addressRegister]
 
-            registers[a] = memory.readProcess(process, address)
+            registers[a] = memory.readProcess(
+                process,
+                registers[addressRegister]
+            )
         }
 
         if (operation === opcode.STORE_AT) {
             const addressRegister = memory.read(instructionAddress + 2)
-            const address = registers[addressRegister]
 
-            memory.writeProcess(process, address, registers[a])
+            memory.writeProcess(
+                process,
+                registers[addressRegister],
+                registers[a]
+            )
+        }
+
+        if (operation === opcode.LOAD16_AT) {
+            const addressRegister = memory.read(instructionAddress + 2)
+
+            registers[a] = readProcess16(
+                process,
+                registers[addressRegister]
+            )
+        }
+
+        if (operation === opcode.STORE16_AT) {
+            const addressRegister = memory.read(instructionAddress + 2)
+
+            writeProcess16(
+                process,
+                registers[addressRegister],
+                registers[a]
+            )
         }
 
         if (operation === opcode.ADD) {
@@ -101,23 +123,17 @@ const run = (process, instructionCount) => {
         }
 
         if (operation === opcode.JMP) {
-            const target = read16(instructionAddress + 1)
-
-            process.instructionPointer = target
+            process.instructionPointer = read16(instructionAddress + 1)
             continue
         }
 
         if (operation === opcode.JE && process.zeroFlag) {
-            const target = read16(instructionAddress + 1)
-
-            process.instructionPointer = target
+            process.instructionPointer = read16(instructionAddress + 1)
             continue
         }
 
         if (operation === opcode.JNE && !process.zeroFlag) {
-            const target = read16(instructionAddress + 1)
-
-            process.instructionPointer = target
+            process.instructionPointer = read16(instructionAddress + 1)
             continue
         }
 
