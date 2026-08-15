@@ -4,11 +4,10 @@ import {
     memory,
 } from './memory.js'
 
-let previousFrame = ''
+const REFRESH_RATE = 30
+const REFRESH_INTERVAL = 1000 / REFRESH_RATE
 
-const start = () => {
-    process.stdout.write('\x1b[2J\x1b[H')
-}
+let previousFrame = ''
 
 const render = () => {
     const lines = []
@@ -41,10 +40,6 @@ const render = () => {
 
     const frame = lines.join('\n')
 
-    /*
-        Only redraw the real terminal when the simulated
-        framebuffer has actually changed.
-    */
     if (frame === previousFrame) {
         return
     }
@@ -54,7 +49,14 @@ const render = () => {
     process.stdout.write(`\x1b[H${frame}`)
 }
 
+const start = () => {
+    process.stdout.write('\x1b[2J\x1b[H')
+
+    render()
+
+    setInterval(render, REFRESH_INTERVAL)
+}
+
 export const screen = {
     start,
-    render,
 }

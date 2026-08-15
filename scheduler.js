@@ -1,10 +1,13 @@
 import { cpu } from './cpu.js'
 import { process } from './process.js'
 
-const TIME_SLICE = 3
+const TIME_SLICE = 2
 
 /**
- * Give every process one CPU time slice.
+ * Simple round-robin scheduler.
+ *
+ * Give every process 2 CPU instructions,
+ * then return.
  */
 const run = () => {
     for (const currentProcess of [...process.processes]) {

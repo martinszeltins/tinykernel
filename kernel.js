@@ -1,16 +1,13 @@
 import { process } from './process.js'
 import { scheduler } from './scheduler.js'
 import { screen } from './screen.js'
+import { timer } from './timer.js'
 
 export const kernel = {
     run() {
         screen.start()
-
         process.spawn('/sbin/init')
-
-        while (true) {
-            scheduler.run()
-            screen.render()
-        }
+        process.spawn('/bin/animate')
+        timer.start(scheduler.run)
     },
 }
