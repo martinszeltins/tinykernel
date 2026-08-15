@@ -653,6 +653,97 @@ td:first-child {
   font-size: 0.85rem;
 }
 
+.how {
+  margin-top: 28px;
+}
+
+.illus {
+  margin-top: 24px;
+}
+
+.bar-map {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface2);
+  margin-top: 14px;
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 0.82rem;
+}
+
+.bar-row:last-child {
+  border-bottom: 0;
+}
+
+.bar-label {
+  flex: 0 0 200px;
+  color: var(--text);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.bar-label small {
+  display: block;
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.76rem;
+}
+
+.bar-track {
+  flex: 1;
+  display: flex;
+  min-height: 22px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 4px;
+}
+
+.bar.pseg { background: rgba(96, 165, 250, 0.35); }
+.bar.dseg { background: rgba(52, 211, 153, 0.35); }
+.bar.kseg { background: rgba(74, 222, 128, 0.25); }
+.bar.fseg { background: rgba(251, 191, 36, 0.35); }
+.bar.head { background: rgba(251, 146, 60, 0.35); }
+
+.bar.free {
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  flex: 1;
+}
+
+.bar-note {
+  flex: 0 0 100px;
+  text-align: right;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.map-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+
 @media (max-width: 980px) {
   .hero, .memory-wrap, .two, .three, .four {
     grid-template-columns: 1fr;
@@ -664,6 +755,9 @@ td:first-child {
     transform: rotate(90deg);
   }
   .layer {
+    grid-template-columns: 1fr;
+  }
+  .map-pair {
     grid-template-columns: 1fr;
   }
   .timeline {
@@ -707,17 +801,74 @@ td:first-child {
 <div class="layer userL"><div class="label">Programs</div><div class="chips"><span class="chip">/sbin/init</span><span class="chip">/bin/animate</span><span class="chip">/games/snake</span><span class="chip">/bin/receiver</span><span class="chip">/bin/sender</span></div></div>
 <div class="layer hwL"><div class="label">Simulated hardware</div><div class="chips"><span class="chip">CPU</span><span class="chip">1 MiB RAM</span><span class="chip">1 MiB disk</span><span class="chip">timer</span><span class="chip">framebuffer</span><span class="chip">keyboard register</span></div></div>
 </div>
-<div class="callout"><strong>The central object is the process.</strong> A program becomes a process when the kernel loads its bytes into RAM, allocates private memory, creates CPU state for it, assigns a PID, and places it in the process table. The scheduler then repeatedly gives that process CPU time.</div></section>
-<section id="boot"><h2>2. Boot</h2><p class="intro">We intentionally skip BIOS/UEFI and a bootloader. Conceptually, imagine the bootloader has already put the kernel in memory and transferred control to it. Our JavaScript entry point begins there.</p><div class="flow"><div class="node"><code>main.js</code><br><span class="small">kernel.run()</span></div><div class="arrow">→</div><div class="node">screen starts<br><span class="small">terminal renderer</span></div><div class="arrow">→</div><div class="node">keyboard starts<br><span class="small">raw input</span></div><div class="arrow">→</div><div class="node">programs spawn<br><span class="small">disk → RAM → PCB</span></div><div class="arrow">→</div><div class="node">timer starts<br><span class="small">scheduler ticks</span></div></div><div class="callout"><strong>Spawn is the bridge from program to process.</strong> The filesystem returns machine-code bytes, RAM receives those bytes, private data is allocated, and a process control structure is created.</div></section>
+<div class="callout"><strong>The central object is the process.</strong> A program becomes a process when the kernel loads its bytes into RAM, allocates private memory, creates CPU state for it, assigns a PID, and places it in the process table. The scheduler then repeatedly gives that process CPU time.</div>
+<div class="how"><h3>How it works in the code</h3><p>There are two execution worlds. Node.js runs the kernel implementation (<code>kernel.js</code>, <code>cpu.js</code>, <code>memory.js</code>, and the rest). User programs are byte arrays on disk; only the simulated CPU executes them through <code>cpu.run()</code>. Programs never import Node modules or call JavaScript functions.</p>
+<div class="grid three" style="margin-top:16px"><div class="card"><span class="tag kernel">Entry & boot</span><p><code>main.js</code> calls <code>kernel.run()</code>. <code>kernel.js</code> starts I/O bridges, spawns programs, and arms the timer.</p></div><div class="card"><span class="tag program">Execution</span><p><code>cpu.js</code> fetch/decode/execute loop. <code>scheduler.js</code> calls it on a timer. <code>process.js</code> holds the process table.</p></div><div class="card"><span class="tag data">Memory & storage</span><p><code>memory.js</code> is physical RAM plus address translation. <code>filesystem.js</code> and <code>disk.js</code> load programs from the simulated disk.</p></div><div class="card"><span class="tag kernel">Kernel services</span><p><code>syscall.js</code> dispatches kernel requests. <code>ipc.js</code> manages mailboxes. <code>timer.js</code> drives scheduling.</p></div><div class="card"><span class="tag disk">Programs on disk</span><p><code>asm.js</code> assembles instruction helpers into bytes. <code>disk.js</code> embeds those bytes into the disk image at module load.</p></div><div class="card"><span class="tag device">Host I/O</span><p><code>screen.js</code> and <code>keyboard.js</code> bridge the simulated framebuffer and keyboard register to the real terminal.</p></div></div>
+<div class="callout" style="margin-top:20px"><strong>The kernel main loop is not one function.</strong> Two independent <code>setInterval</code> loops run in parallel: the timer fires every 75 ms and calls <code>scheduler.run()</code>, which runs up to 56 instructions per ready process; <code>screen.js</code> polls the framebuffer every 33.3 ms (30 FPS) and redraws the terminal when pixels change.</div></div></section>
+<section id="boot"><h2>2. Boot</h2><p class="intro">We intentionally skip BIOS/UEFI and a bootloader. Conceptually, imagine the bootloader has already put the kernel in memory and transferred control to it. Our JavaScript entry point begins there.</p><div class="flow"><div class="node"><code>main.js</code><br><span class="small">kernel.run()</span></div><div class="arrow">→</div><div class="node">screen starts<br><span class="small">terminal renderer</span></div><div class="arrow">→</div><div class="node">keyboard starts<br><span class="small">raw input</span></div><div class="arrow">→</div><div class="node">programs spawn<br><span class="small">disk → RAM → PCB</span></div><div class="arrow">→</div><div class="node">timer starts<br><span class="small">scheduler ticks</span></div></div><div class="callout"><strong>Spawn is the bridge from program to process.</strong> The filesystem returns machine-code bytes, RAM receives those bytes, private data is allocated, and a process control structure is created.</div>
+<div class="how"><h3>How it works in the code</h3><p><code>kernel.run()</code> in <code>kernel.js</code> runs this exact sequence:</p><pre>screen.start()          // clear terminal, start 30 FPS framebuffer poll
+keyboard.start()        // raw stdin for arrow keys and WASD
+
+process.spawn('/sbin/init')      // PID 1
+process.spawn('/bin/animate')    // PID 2
+process.spawn('/games/snake')    // PID 3
+process.spawn('/bin/receiver')   // PID 4
+process.spawn('/bin/sender')     // PID 5
+
+timer.start(scheduler.run)       // 75 ms ticks begin</pre>
+<p>Spawn order fixes PIDs — the sender hardcodes receiver PID 4 because receiver is always spawned fourth. All five processes exist before the first scheduler tick; boot spawning is synchronous. <code>screen.start()</code> clears the terminal with ANSI escape codes, renders once, then polls every 33.3 ms. <code>keyboard.start()</code> enables raw TTY mode and maps physical keys to small integer codes.</p>
+<p>Run the kernel from the project root with <code>node main.js</code>.</p></div></section>
 <section id="cpu"><h2>3. CPU and instructions</h2><p class="intro">Programs are not JavaScript functions. They are arrays of raw bytes representing instructions for our simulated CPU. Every instruction is exactly <strong>4 bytes</strong>. The CPU fetches, decodes, executes, and advances the instruction pointer unless a branch changes it.</p><div class="grid two"><div class="card"><span class="tag program">CPU state</span><h3>Per process</h3><pre>R0, R1, R2, R3
 instructionPointer
 zeroFlag</pre><p>Registers and instruction pointer live in the process, so switching processes naturally switches CPU context.</p></div><div class="card"><span class="tag program">Format</span><h3>Fixed 4-byte instruction</h3><pre>[ opcode, a, b, c ]</pre><p>Some instructions treat bytes 2–3 as a 16-bit value; others treat them as register numbers.</p></div></div>
 <div class="tablewrap" style="margin-top:22px"><table><thead><tr><th>Instruction</th><th>Meaning</th><th>Use</th></tr></thead><tbody>
 <tr><td>MOV</td><td>Immediate value → register.</td><td>Constants, counters, addresses.</td></tr><tr><td>LOAD / STORE</td><td>Read/write a fixed process-visible address.</td><td>Private data and MMIO.</td></tr><tr><td>LOAD16 / STORE16</td><td>16-bit fixed-address memory access.</td><td>Positions, indexes, lengths.</td></tr><tr><td>LOAD_AT / STORE_AT</td><td>Indirect byte access through a register-held address.</td><td>Dynamic framebuffer cells.</td></tr><tr><td>LOAD16_AT / STORE16_AT</td><td>Indirect 16-bit access.</td><td>Snake body ring buffer.</td></tr><tr><td>ADD / SUB / MOD</td><td>Arithmetic on registers.</td><td>Movement, indexing, wraparound.</td></tr><tr><td>CMP</td><td>Compare registers; set zeroFlag.</td><td>Conditions.</td></tr><tr><td>JMP / JE / JNE</td><td>Control flow.</td><td>Loops and branches.</td></tr><tr><td>SYSCALL</td><td>Request a kernel service.</td><td>Randomness and IPC.</td></tr><tr><td>NOP</td><td>Do nothing.</td><td>Timing padding in animate.</td></tr><tr><td>HALT</td><td>Terminate process.</td><td>Process exit.</td></tr>
-</tbody></table></div><div class="callout"><strong>The assembler is only syntax sugar.</strong> <code>MOV(R0, 72)</code> becomes four bytes. Labels are resolved before execution; the CPU only ever sees numeric addresses.</div></section>
+</tbody></table></div><div class="callout"><strong>The assembler is only syntax sugar.</strong> <code>MOV(R0, 72)</code> becomes four bytes. Labels are resolved before execution; the CPU only ever sees numeric addresses.</div>
+<div class="illus"><h3>Illustration: instruction fetch vs data access</h3><p>Code and data use different paths in memory — this is easy to miss when reading <code>cpu.js</code>.</p><pre>INSTRUCTION FETCH (every opcode)
+  programStart + instructionPointer
+        ↓
+  memory.read(physical address)     ← raw RAM, no translation
+
+DATA ACCESS (LOAD / STORE / LOAD16 / …)
+  process-visible address in instruction
+        ↓
+  memory.readProcess(process, address)
+        ↓
+  keyboard | framebuffer | private data slot</pre></div>
+<div class="how"><h3>How it works in the code</h3><p><code>cpu.run(process, instructionCount)</code> in <code>cpu.js</code> is the heart of execution. Each iteration:</p><pre>instructionAddress = process.programStart + process.instructionPointer
+opcode   = memory.read(instructionAddress)      // physical RAM
+operandA = memory.read(instructionAddress + 1)
+// decode and execute...
+process.instructionPointer += 4   // unless branch, syscall block, or HALT</pre>
+<p><strong>Instruction fetch uses physical memory.</strong> Code bytes are read with <code>memory.read()</code>, not <code>readProcess()</code>. Program code and process data live in different address spaces — the instruction pointer is a byte offset into the loaded program, not a process-visible address.</p>
+<p><strong>Branches</strong> set <code>instructionPointer</code> to a byte offset within the program. The assembler in <code>asm.js</code> resolves labels to these offsets in a two-pass <code>assemble()</code>: pass 1 records label addresses, pass 2 emits bytes.</p>
+<p><strong>SYSCALL</strong> calls <code>syscall.handle(process, number)</code>. If the handler returns <code>{ blocked: true }</code> (empty RECEIVE), <code>cpu.run</code> returns immediately and the instruction pointer is <em>not</em> advanced — the same SYSCALL is retried on the next scheduler slice.</p>
+<p><strong>HALT</strong> returns <code>true</code> to the scheduler, which calls <code>process.exit()</code>.</p>
+<p><strong>NOP</strong> has an opcode in <code>instructions.js</code> but no explicit case in <code>cpu.js</code>. Unmatched opcodes still fall through to <code>IP += 4</code>. That is how <code>/bin/animate</code> slows itself — 54 NOPs per animation step consume CPU time without changing state.</p></div></section>
 <section id="ram"><h2>4. Physical RAM</h2><p class="intro">The simulated machine has exactly 1 MiB of physical RAM backed by a <code>Uint8Array</code>.</p><div class="memory-wrap"><div><div class="memory-map"><div class="seg kseg"><div class="addr">0</div><div><div class="name">Kernel region</div><span class="small">Conceptual kernel code/data.</span></div><div class="size">64 KiB</div></div><div class="seg pseg"><div class="addr">65,536</div><div><div class="name">Program area</div><span class="small">Loaded executable bytes.</span></div><div class="size">448 KiB</div></div><div class="seg dseg"><div class="addr">524,288</div><div><div class="name">Process data slots</div><span class="small">8 private fixed-size regions.</span></div><div class="size">8 × 60 KiB</div></div><div class="seg gseg"><div class="addr">~1,015,808</div><div><div class="name">Unused remainder</div><span class="small">Fixed slots do not divide perfectly.</span></div><div class="size">~30 KiB</div></div><div class="seg fseg"><div class="addr">1,046,576</div><div><div class="name">Physical framebuffer</div><span class="small">80 × 25 characters.</span></div><div class="size">2,000 B</div></div></div></div>
 <div><div class="address-space"><div class="as"><div class="top"><span>0x0000–0xEFFF</span><span>private RAM</span></div><small>Translated to this process's own data slot.</small></div><div class="as" style="background:rgba(245,158,11,.1)"><div class="top"><span>0xF000–0xF7CF</span><span>framebuffer</span></div><small>Shared memory-mapped output device.</small></div><div class="as"><div class="top"><span>0xF7D0–0xF7FF</span><span>unused MMIO</span></div><small>Free address space.</small></div><div class="as" style="background:rgba(245,158,11,.1)"><div class="top"><span>0xF800</span><span>keyboard</span></div><small>Read returns latest key code and consumes it.</small></div><div class="as"><div class="top"><span>0xF801–0xFFFF</span><span>reserved</span></div><small>Future devices.</small></div></div><div class="callout"><strong>Simple address translation:</strong> process address <code>42</code> maps to <code>process.dataStart + 42</code>. The same visible address in another process maps elsewhere physically.</div></div></div>
-<div class="grid three" style="margin-top:24px"><div class="card"><span class="tag data">Program memory</span><h3>Variable-size first fit</h3><p>Executable code uses free blocks. Exited programs free and merge adjacent blocks.</p></div><div class="card"><span class="tag data">Private data</span><h3>Fixed 0xF000-byte slots</h3><p>Each process gets 61,440 private bytes. This keeps allocation and isolation obvious.</p></div><div class="card"><span class="tag device">Device memory</span><h3>MMIO bypasses private RAM</h3><p>Addresses in the device range are routed to shared device behavior instead of the process data slot.</p></div></div></section>
+<div class="grid three" style="margin-top:24px"><div class="card"><span class="tag data">Program memory</span><h3>Variable-size first fit</h3><p>Executable code uses free blocks. Exited programs free and merge adjacent blocks.</p></div><div class="card"><span class="tag data">Private data</span><h3>Fixed 0xF000-byte slots</h3><p>Each process gets 61,440 private bytes. This keeps allocation and isolation obvious.</p></div><div class="card"><span class="tag device">Device memory</span><h3>MMIO bypasses private RAM</h3><p>Addresses in the device range are routed to shared device behavior instead of the process data slot.</p></div></div>
+<div class="illus"><h3>Illustration: program area after boot</h3><p>Five executables are copied into the physical program region starting at byte 65,536. They sit back-to-back; the rest of the 448 KiB area stays free.</p>
+<div class="bar-map"><div class="bar-row"><div class="bar-label">PID 1 <small>/sbin/init</small></div><div class="bar-track"><div class="bar pseg" style="flex:44">44 B</div><div class="bar free">free …</div></div><div class="bar-note">@ 65536</div></div><div class="bar-row"><div class="bar-label">PID 2 <small>/bin/animate</small></div><div class="bar-track"><div class="bar pseg" style="flex:2256">2256 B</div><div class="bar free">free …</div></div><div class="bar-note">@ 65580</div></div><div class="bar-row"><div class="bar-label">PID 3 <small>/games/snake</small></div><div class="bar-track"><div class="bar pseg" style="flex:688">688 B</div><div class="bar free">free …</div></div><div class="bar-note">@ 67836</div></div><div class="bar-row"><div class="bar-label">PID 4 <small>/bin/receiver</small></div><div class="bar-track"><div class="bar pseg" style="flex:60">60 B</div><div class="bar free">free …</div></div><div class="bar-note">@ 68524</div></div><div class="bar-row"><div class="bar-label">PID 5 <small>/bin/sender</small></div><div class="bar-track"><div class="bar pseg" style="flex:24">24 B</div><div class="bar free">free …</div></div><div class="bar-note">@ 68584</div></div></div>
+<h3 style="margin-top:28px">Illustration: data slot assignment</h3><p>Eight fixed slots are precomputed before the physical framebuffer. Boot spawns consume slots 1–5.</p>
+<div class="bar-map"><div class="bar-row"><div class="bar-label">Slot 1 <small>PID 1 init</small></div><div class="bar-track"><div class="bar dseg" style="flex:61440">61,440 B private</div></div><div class="bar-note">524288</div></div><div class="bar-row"><div class="bar-label">Slot 2 <small>PID 2 animate</small></div><div class="bar-track"><div class="bar dseg" style="flex:61440">61,440 B</div></div><div class="bar-note">585728</div></div><div class="bar-row"><div class="bar-label">Slot 3 <small>PID 3 snake</small></div><div class="bar-track"><div class="bar dseg" style="flex:61440">61,440 B</div></div><div class="bar-note">647168</div></div><div class="bar-row"><div class="bar-label">Slot 4 <small>PID 4 receiver</small></div><div class="bar-track"><div class="bar dseg" style="flex:61440">61,440 B</div></div><div class="bar-note">708608</div></div><div class="bar-row"><div class="bar-label">Slot 5 <small>PID 5 sender</small></div><div class="bar-track"><div class="bar dseg" style="flex:61440">61,440 B</div></div><div class="bar-note">770048</div></div><div class="bar-row"><div class="bar-label">Slot 6 <small>free</small></div><div class="bar-track"><div class="bar free">empty</div></div><div class="bar-note">831488</div></div><div class="bar-row"><div class="bar-label">Slot 7 <small>free</small></div><div class="bar-track"><div class="bar free">empty</div></div><div class="bar-note">892928</div></div><div class="bar-row"><div class="bar-label">Slot 8 <small>free</small></div><div class="bar-track"><div class="bar free">empty</div></div><div class="bar-note">954368</div></div></div>
+<h3 style="margin-top:28px">Illustration: address translation</h3><p>Two processes can use the same visible address; MMIO addresses bypass private slots entirely.</p>
+<div class="map-pair"><div class="card"><span class="tag program">PID 3 sees</span><pre>LOAD  0x0042   → private byte at offset 42
+STORE 0xF010   → framebuffer cell (shared)
+LOAD  0xF800   → keyboard register</pre></div><div class="card"><span class="tag data">Physical RAM</span><pre>bytes[647168 + 42]     snake data slot
+bytes[1046576 + 16]    shared framebuffer
+keyboard.read()        not in bytes[]</pre></div></div>
+<pre style="margin-top:14px">process address  →  readProcess / writeProcess  →  destination
+     0x0042       →  dataStart + 42               →  private slot (per PID)
+     0xF010       →  FRAMEBUFFER_START + 16       →  shared screen
+     0xF800       →  keyboard.read()              →  host input</pre></div>
+<div class="how"><h3>How it works in the code</h3><p><strong>Program loading</strong> (<code>memory.loadProgram</code>): first-fit from <code>freeProgramBlocks</code>. The allocator takes bytes from the <em>front</em> of a free block — <code>block.start</code> advances as programs are loaded. On exit, <code>freeProgram</code> zeroes the region, pushes it back into the free list, and merges adjacent blocks.</p>
+<p><strong>Data slots</strong> (<code>allocateData</code> / <code>freeData</code>): at startup, <code>memory.js</code> precomputes a list of slot start addresses that fit before the physical framebuffer. Up to <strong>8</strong> slots of 61,440 bytes each. Allocation is <code>freeDataSlots.shift()</code>; free is <code>push()</code> plus zeroing the slot. No growth beyond precomputed slots.</p>
+<p><strong>Address translation</strong> in <code>readProcess</code> / <code>writeProcess</code>:</p><pre>0xF800           → keyboard.read()
+0xF000–0xF7CF    → bytes[FRAMEBUFFER_START + offset]  // shared
+address &lt; dataSize → bytes[dataStart + address]        // private
+out of range     → read returns 0, writes dropped</pre>
+<p><strong>Isolation example:</strong> PID 3 (snake) and PID 4 (receiver) both use address <code>0</code> in their programs, but it maps to different physical <code>dataStart</code> bases. Each process sees the same virtual layout; the kernel translates to separate physical slots.</p></div></section>
 <section id="disk"><h2>5. Disk and filesystem</h2><p class="intro">Disk is another 1 MiB byte array. The filesystem metadata really lives on the disk: the first 1024 bytes contain a serialized file table, followed by contiguous program bytes.</p><div class="grid two"><div class="disk-map"><div class="diskrow head"><div class="mono">0–1023</div><div><strong>File table</strong><br><span class="small">JSON metadata.</span></div></div><div class="diskrow prog"><div class="mono">1024...</div><div><strong>/sbin/init</strong></div></div><div class="diskrow prog"><div class="mono">next...</div><div><strong>/bin/animate</strong></div></div><div class="diskrow prog"><div class="mono">next...</div><div><strong>/games/snake</strong></div></div><div class="diskrow prog"><div class="mono">next...</div><div><strong>/bin/receiver</strong></div></div><div class="diskrow prog"><div class="mono">next...</div><div><strong>/bin/sender</strong></div></div></div><div><div class="tree">/
 ├── sbin/
 │   └── init
@@ -727,10 +878,55 @@ zeroFlag</pre><p>Registers and instruction pointer live in the process, so switc
 │   └── sender
 └── games/
     └── snake</div><div class="callout"><strong>Directories are entries too.</strong> A directory has an ID; children point to it with <code>parentDirID</code>. Root is represented by parent ID <code>0</code>.</div></div></div>
-<h3 style="margin-top:30px">Resolving <code>/games/snake</code></h3><div class="flow"><div class="node">split path</div><div class="arrow">→</div><div class="node">root ID 0</div><div class="arrow">→</div><div class="node">find games</div><div class="arrow">→</div><div class="node">find snake</div><div class="arrow">→</div><div class="node">disk.read(start,size)</div></div><div class="callout"><strong>Raw disk has no paths.</strong> The filesystem is the layer that gives byte ranges names, types, parent relationships, starts, and sizes.</div></section>
-<section id="processes"><h2>6. Programs become processes</h2><p class="intro">A program on disk is passive bytes. A process is the running entity created when the kernel combines those bytes with memory and CPU state.</p><div class="pcbbox"><div class="pcbtitle"><span>Example process control structure</span><span>PID 3</span></div><div class="pcb"><div><strong>pid</strong><br>unique process ID</div><div><strong>state</strong><br>ready / blocked</div><div><strong>programStart</strong><br>physical code address</div><div><strong>programSize</strong><br>code bytes</div><div><strong>dataStart</strong><br>private physical region</div><div><strong>dataSize</strong><br>0xF000</div><div><strong>instructionPointer</strong><br>current code offset</div><div><strong>registers</strong><br>R0–R3</div><div><strong>zeroFlag</strong><br>true / false</div></div></div><div class="grid three" style="margin-top:22px"><div class="card"><span class="tag kernel">Create</span><p>Read program, allocate code memory, allocate private data, create PCB, assign PID, register IPC mailbox.</p></div><div class="card"><span class="tag kernel">Run</span><p>The scheduler repeatedly calls the CPU with that process. CPU state lives inside the PCB.</p></div><div class="card"><span class="tag kernel">Exit</span><p>Free program memory, clear private data, unregister IPC mailbox, remove PCB from process table.</p></div></div></section>
-<section id="scheduler"><h2>7. Scheduler and time sharing</h2><p class="intro">The simulated timer fires every 75 ms. Each tick makes one scheduler pass. Every ready process gets up to 56 instructions; blocked processes get none.</p><div class="timeline"><div class="head">tick</div><div class="head">PID 1 init</div><div class="head">PID 2 animate</div><div class="head">PID 3 snake</div><div class="head">PID 4 recv</div><div class="head">PID 5 send</div><div class="head">t=0</div><div class="run">run</div><div class="run">run</div><div class="run">run</div><div class="blocked">RECEIVE → block</div><div class="run">SEND</div><div class="head">t=75ms</div><div class="run">run</div><div class="run">run</div><div class="run">run</div><div class="wake">woken → run</div><div class="blocked">RECEIVE → block</div></div><div class="callout"><strong>Context switching is just selecting a different PCB.</strong> The CPU reads and updates registers and instruction pointer stored on whichever process the scheduler passes in.</div></section>
-<section id="syscalls"><h2>8. System calls</h2><p class="intro">Normal CPU instructions handle local computation and memory access. A syscall is used when a program needs a kernel-owned service. Arguments and return values use registers.</p><div class="tablewrap"><table><thead><tr><th>No.</th><th>Name</th><th>Input</th><th>Result</th></tr></thead><tbody><tr><td>1</td><td>RANDOM</td><td><code>R0 = max</code></td><td><code>R0 = 0..max-1</code></td></tr><tr><td>2</td><td>SEND</td><td><code>R0 = PID</code>, <code>R1 = message</code></td><td><code>R0 = 1/0</code>; wakes blocked receiver.</td></tr><tr><td>3</td><td>RECEIVE</td><td>none</td><td><code>R0 = sender PID</code>, <code>R1 = message</code>; blocks if empty.</td></tr></tbody></table></div><div class="flow"><div class="node">program</div><div class="arrow">→</div><div class="node">SYSCALL instruction</div><div class="arrow">→</div><div class="node">CPU</div><div class="arrow">→</div><div class="node">kernel handler</div><div class="arrow">→</div><div class="node">return / block / wake</div></div><div class="callout"><strong>Blocking RECEIVE:</strong> when no message exists, the process becomes blocked and the CPU returns without advancing the instruction pointer. When SEND later wakes it, the same RECEIVE instruction is retried.</div></section>
+<h3 style="margin-top:30px">Resolving <code>/games/snake</code></h3><div class="flow"><div class="node">split path</div><div class="arrow">→</div><div class="node">root ID 0</div><div class="arrow">→</div><div class="node">find games</div><div class="arrow">→</div><div class="node">find snake</div><div class="arrow">→</div><div class="node">disk.read(start,size)</div></div><div class="callout"><strong>Raw disk has no paths.</strong> The filesystem is the layer that gives byte ranges names, types, parent relationships, starts, and sizes.</div>
+<div class="illus"><h3>Illustration: building the disk image</h3><div class="flow"><div class="node"><code>disk.js</code><br><span class="small">program defs</span></div><div class="arrow">→</div><div class="node"><code>assemble()</code><br><span class="small">byte arrays</span></div><div class="arrow">→</div><div class="node">1 MiB <code>Uint8Array</code><br><span class="small">disk backing store</span></div><div class="arrow">→</div><div class="node">JSON @ 0<br><span class="small">file table</span></div><div class="arrow">→</div><div class="node">binaries @ 1024<br><span class="small">contiguous layout</span></div></div>
+<h3 style="margin-top:28px">Illustration: file table entry</h3><p>Each file on disk is described by a JSON object in the first 1024 bytes:</p><pre>{
+  "id": 6,
+  "parentDirID": 5,
+  "type": "file",
+  "name": "snake",
+  "start": 3184,
+  "size": 688
+}</pre>
+<h3 style="margin-top:28px">Illustration: spawn copies disk → RAM</h3><pre>disk bytes [3184 .. 3184+688]     /games/snake on disk
+        ↓
+filesystem.read('/games/snake')
+        ↓
+memory.loadProgram(bytes)         copy into program area @ 67836
+        ↓
+process.programStart = 67836      CPU fetches from physical RAM
+process.instructionPointer = 0    byte offset into that program</pre></div>
+<div class="how"><h3>How it works in the code</h3><p>The disk image is built when <code>disk.js</code> loads — there is no separate build step. Programs are defined with <code>assemble(...)</code> from <code>asm.js</code>, the JSON file table is written to bytes 0–1023, and program binaries are laid out contiguously starting at offset 1024.</p>
+<p>At spawn time, <code>filesystem.read(path)</code> calls <code>resolve(path)</code>, which walks the JSON file table by matching <code>parentDirID</code> and <code>name</code> for each path component, then <code>disk.read(file.start, file.size)</code> returns a slice of the disk byte array.</p>
+<p>The filesystem is <strong>read-only</strong> — there is no <code>filesystem.write</code>. Programs cannot create or modify files at runtime.</p>
+<p>Each file table entry has <code>id</code>, <code>parentDirID</code>, <code>type</code>, <code>name</code>, and for files also <code>start</code> and <code>size</code> pointing into the raw disk byte array.</p></div></section>
+<section id="processes"><h2>6. Programs become processes</h2><p class="intro">A program on disk is passive bytes. A process is the running entity created when the kernel combines those bytes with memory and CPU state.</p><div class="pcbbox"><div class="pcbtitle"><span>Example process control structure</span><span>PID 3</span></div><div class="pcb"><div><strong>pid</strong><br>unique process ID</div><div><strong>state</strong><br>ready / blocked</div><div><strong>programStart</strong><br>physical code address</div><div><strong>programSize</strong><br>code bytes</div><div><strong>dataStart</strong><br>private physical region</div><div><strong>dataSize</strong><br>0xF000</div><div><strong>instructionPointer</strong><br>current code offset</div><div><strong>registers</strong><br>R0–R3</div><div><strong>zeroFlag</strong><br>true / false</div></div></div><div class="grid three" style="margin-top:22px"><div class="card"><span class="tag kernel">Create</span><p>Read program, allocate code memory, allocate private data, create PCB, assign PID, register IPC mailbox.</p></div><div class="card"><span class="tag kernel">Run</span><p>The scheduler repeatedly calls the CPU with that process. CPU state lives inside the PCB.</p></div><div class="card"><span class="tag kernel">Exit</span><p>Free program memory, clear private data, unregister IPC mailbox, remove PCB from process table.</p></div></div>
+<div class="illus"><h3>Illustration: spawn fills two RAM regions</h3><div class="grid two"><div class="card"><span class="tag disk">On disk</span><pre>offset 3184
+size 688 bytes
+[/games/snake machine code]</pre></div><div class="card"><span class="tag data">In RAM after spawn</span><pre>program area @ 67836   ← code bytes (688 B)
+data slot @ 647168     ← 61,440 B private RAM
+PCB links both + CPU state</pre></div></div><pre style="margin-top:14px">disk slice  ──copy──►  program area (programStart)
+              allocate►  data slot (dataStart)
+              create  ►  PCB { pid, registers, IP, … }</pre></div>
+<div class="how"><h3>How it works in the code</h3><p><code>process.spawn(path)</code> in <code>process.js</code> runs this chain:</p><pre>filesystem.read(path)
+  → memory.loadProgram(bytes)     // copy into physical program area
+  → memory.allocateData()         // take one private slot
+  → build PCB { pid, state, programStart, dataStart,
+                instructionPointer: 0, registers: [0,0,0,0] }
+  → processes.push(newProcess)
+  → ipc.register(newProcess)      // empty mailbox</pre>
+<p>The process table is a plain JavaScript array <code>process.processes</code>. PIDs auto-increment from 1 via <code>nextPID</code>. States are only <code>'ready'</code> and <code>'blocked'</code> — IPC receive sets blocked.</p>
+<p><code>process.exit(currentProcess)</code> frees program and data memory (zeroing the data slot), unregisters the IPC mailbox, and removes the PCB with <code>splice</code>. There is no zombie state — the process is gone immediately.</p></div></section>
+<section id="scheduler"><h2>7. Scheduler and time sharing</h2><p class="intro">The simulated timer fires every 75 ms. Each tick makes one scheduler pass. Every ready process gets up to 56 instructions; blocked processes get none.</p><div class="timeline"><div class="head">tick</div><div class="head">PID 1 init</div><div class="head">PID 2 animate</div><div class="head">PID 3 snake</div><div class="head">PID 4 recv</div><div class="head">PID 5 send</div><div class="head">t=0</div><div class="run">run</div><div class="run">run</div><div class="run">run</div><div class="blocked">RECEIVE → block</div><div class="run">SEND</div><div class="head">t=75ms</div><div class="run">run</div><div class="run">run</div><div class="run">run</div><div class="wake">woken → run</div><div class="blocked">RECEIVE → block</div></div><div class="callout"><strong>Context switching is just selecting a different PCB.</strong> The CPU reads and updates registers and instruction pointer stored on whichever process the scheduler passes in.</div>
+<div class="illus"><h3>Illustration: one scheduler tick</h3><p>Every 75 ms, each <em>ready</em> process runs up to 56 instructions. Blocked processes are skipped.</p><pre>tick ─┬─ PID 1: run 56 instr ─┬─ PID 2: run 56 instr ─┬─ PID 3: run 56 instr
+      ├─ PID 4: skip (blocked on RECEIVE)
+      └─ PID 5: run 56 instr ──► may SEND and wake PID 4 for next tick</pre></div>
+<div class="how"><h3>How it works in the code</h3><p><code>scheduler.run()</code> in <code>scheduler.js</code> iterates a <strong>snapshot</strong> <code>[...process.processes]</code> on every timer tick. Each <code>'ready'</code> process gets up to <strong>56 instructions</strong> (<code>TIME_SLICE</code>) — not one process per tick. All ready processes run during each 75 ms tick.</p>
+<p>Blocked processes are skipped entirely until <code>ipc.send</code> sets their state back to <code>'ready'</code>. Within one tick, a process runs 56 instructions uninterrupted unless it blocks on a syscall or halts.</p>
+<p>The timer in <code>timer.js</code> uses <code>setInterval(onTick, 75)</code> — about 13.3 kernel ticks per second. This is independent of <code>screen.js</code>, which refreshes at 30 FPS.</p></div></section>
+<section id="syscalls"><h2>8. System calls</h2><p class="intro">Normal CPU instructions handle local computation and memory access. A syscall is used when a program needs a kernel-owned service. Arguments and return values use registers.</p><div class="tablewrap"><table><thead><tr><th>No.</th><th>Name</th><th>Input</th><th>Result</th></tr></thead><tbody><tr><td>1</td><td>RANDOM</td><td><code>R0 = max</code></td><td><code>R0 = 0..max-1</code></td></tr><tr><td>2</td><td>SEND</td><td><code>R0 = PID</code>, <code>R1 = message</code></td><td><code>R0 = 1/0</code>; wakes blocked receiver.</td></tr><tr><td>3</td><td>RECEIVE</td><td>none</td><td><code>R0 = sender PID</code>, <code>R1 = message</code>; blocks if empty.</td></tr></tbody></table></div><div class="flow"><div class="node">program</div><div class="arrow">→</div><div class="node">SYSCALL instruction</div><div class="arrow">→</div><div class="node">CPU</div><div class="arrow">→</div><div class="node">kernel handler</div><div class="arrow">→</div><div class="node">return / block / wake</div></div><div class="callout"><strong>Blocking RECEIVE:</strong> when no message exists, the process becomes blocked and the CPU returns without advancing the instruction pointer. When SEND later wakes it, the same RECEIVE instruction is retried.</div>
+<div class="how"><h3>How it works in the code</h3><p><code>syscall.handle(process, number)</code> in <code>syscall.js</code> reads and writes registers on the PCB. Programs never call JavaScript directly — the CPU routes <code>SYSCALL</code> instructions here.</p>
+<ul class="notes"><li><strong>RANDOM (1):</strong> treats <code>R0</code> as max, replaces it with <code>floor(Math.random() * R0)</code>.</li><li><strong>SEND (2):</strong> <code>ipc.send(senderPID, R0, R1)</code>; <code>R0</code> becomes 1 on success, 0 if destination PID has no mailbox; wakes a blocked receiver.</li><li><strong>RECEIVE (3):</strong> FIFO <code>shift()</code> from mailbox, or block if empty; on success <code>R0 = senderPID</code>, <code>R1 = value</code> (masked to 16 bits).</li><li><strong>Unknown numbers:</strong> no-op, returns <code>{ blocked: false }</code>.</li></ul></div></section>
 <section id="io"><h2>9. Input/output through memory-mapped I/O</h2><p class="intro">This machine exposes devices through special addresses. Programs use ordinary memory instructions; <code>memory.js</code> decides whether an address means private RAM or device hardware.</p><div class="grid two"><div class="card"><span class="tag device">Output</span><h3>Framebuffer at 0xF000</h3><p>2,000 bytes represent 80×25 text cells. Writing an ASCII code changes a cell. <code>screen.js</code> periodically reads the physical framebuffer and renders it to the real terminal.</p><pre>STORE '#', framebufferAddress
         ↓
 memory.js
@@ -743,8 +939,27 @@ terminal</pre></div><div class="card"><span class="tag device">Input</span><h3>K
 1 = up
 2 = right
 3 = down
-4 = left</pre></div></div><div class="callout"><strong>There is no keyboard or framebuffer syscall because this machine deliberately permits direct MMIO.</strong> That is a design choice, not a universal OS rule.</div></section>
-<section id="ipc"><h2>10. Interprocess communication</h2><p class="intro">Each process gets a kernel-managed mailbox. Processes stay isolated; SEND and RECEIVE are the explicit bridge between them.</p><div class="ipcdiag"><div class="ipcbox"><strong>PID 5 sender</strong><br><span class="small">R0=4, R1='!'<br>SYSCALL SEND</span></div><div class="ipca">→</div><div class="ipcbox mid"><strong>Kernel mailbox</strong><br><span class="small">messages are FIFO<br>sender PID is preserved</span></div><div class="ipca">→</div><div class="ipcbox"><strong>PID 4 receiver</strong><br><span class="small">SYSCALL RECEIVE<br>R0=5, R1='!'</span></div></div><div class="grid three" style="margin-top:22px"><div class="card"><span class="tag ipc">Queue</span><p>Messages are appended to a per-process FIFO mailbox.</p></div><div class="card"><span class="tag ipc">Block</span><p>An empty RECEIVE marks the process blocked so it stops consuming CPU time.</p></div><div class="card"><span class="tag ipc">Wake</span><p>SEND to a blocked process marks it ready again.</p></div></div><div class="callout"><strong>This is real kernel-mediated IPC in miniature.</strong> Sockets, pipes, channels, ports, and message queues are richer solutions to the same fundamental problem: isolated processes need an explicit way to communicate.</div></section>
+4 = left</pre></div></div><div class="callout"><strong>There is no keyboard or framebuffer syscall because this machine deliberately permits direct MMIO.</strong> That is a design choice, not a universal OS rule.</div>
+<div class="how"><h3>How it works in the code</h3><p><strong>Framebuffer writes:</strong> a <code>STORE</code> to <code>0xF000+</code> goes through <code>writeProcess</code> into <code>bytes[FRAMEBUFFER_START + offset]</code> — the same physical cells for every process. All programs share one screen.</p>
+<p><strong>Screen rendering:</strong> <code>screen.js</code> calls <code>memory.readFramebuffer()</code> every 33.3 ms, builds an 80×25 character grid with a box-drawing border, and writes <code>\x1b[H</code> to move the cursor home. It skips redraw when <code>previousFrame</code> matches — unchanged frames do not touch the terminal.</p>
+<p><strong>Keyboard reads:</strong> <code>keyboard.read()</code> returns the pending key code then resets to <code>NONE</code>. One LOAD consumes one keypress — holding a key does not auto-repeat into the register.</p>
+<p><strong>Host escape:</strong> Ctrl+C in raw mode restores normal TTY and calls <code>process.exit(0)</code> on the Node host.</p></div></section>
+<section id="ipc"><h2>10. Interprocess communication</h2><p class="intro">Each process gets a kernel-managed mailbox. Processes stay isolated; SEND and RECEIVE are the explicit bridge between them.</p><div class="ipcdiag"><div class="ipcbox"><strong>PID 5 sender</strong><br><span class="small">R0=4, R1='!'<br>SYSCALL SEND</span></div><div class="ipca">→</div><div class="ipcbox mid"><strong>Kernel mailbox</strong><br><span class="small">messages are FIFO<br>sender PID is preserved</span></div><div class="ipca">→</div><div class="ipcbox"><strong>PID 4 receiver</strong><br><span class="small">SYSCALL RECEIVE<br>R0=5, R1='!'</span></div></div><div class="grid three" style="margin-top:22px"><div class="card"><span class="tag ipc">Queue</span><p>Messages are appended to a per-process FIFO mailbox.</p></div><div class="card"><span class="tag ipc">Block</span><p>An empty RECEIVE marks the process blocked so it stops consuming CPU time.</p></div><div class="card"><span class="tag ipc">Wake</span><p>SEND to a blocked process marks it ready again.</p></div></div><div class="callout"><strong>This is real kernel-mediated IPC in miniature.</strong> Sockets, pipes, channels, ports, and message queues are richer solutions to the same fundamental problem: isolated processes need an explicit way to communicate.</div>
+<div class="illus"><h3>Illustration: mailbox before and after SEND</h3><pre>PID 4 mailbox (receiver blocked, queue empty)
+  messages: []
+  process.state: 'blocked'
+
+PID 5 executes SEND(R0=4, R1='!')
+  messages: [{ senderPID: 5, value: 33 }]
+  PID 4 state: 'ready'     ← woken, runs on next tick
+
+PID 4 retries RECEIVE
+  messages: []             ← FIFO shift consumed the message
+  R0=5, R1=33 returned to registers</pre></div>
+<div class="how"><h3>How it works in the code</h3><p><code>ipc.js</code> stores mailboxes in a <code>Map</code>: PID → <code>{ process, messages: [] }</code>. Each message is <code>{ senderPID, value }</code> with <code>value & 0xffff</code>.</p>
+<p><strong>Send:</strong> push to destination FIFO. If <code>mailbox.process.state === 'blocked'</code>, set <code>'ready'</code>. The receiver does not run until the next scheduler tick.</p>
+<p><strong>Receive:</strong> if mailbox empty, set process <code>state = 'blocked'</code> and return <code>null</code> (syscall blocks). Otherwise FIFO <code>shift()</code>.</p>
+<p>The demo sender in <code>disk.js</code> hardcodes <code>RECEIVER_PID = 4</code> because spawn order in <code>kernel.js</code> is fixed — receiver is always the fourth spawn.</p></div></section>
 <section id="snake"><h2>11. Snake as a kernel stress test</h2><p class="intro">Snake exercises nearly everything at once: filesystem loading, process creation, scheduling, CPU instructions, private memory, indirect addressing, randomness via syscall, keyboard MMIO, framebuffer output, and time sharing.</p><div class="snake">┌────────────────────────────────────────────────────────────────────────────────┐
 │HELLO                                                                           │
 │                                                                                │
@@ -792,7 +1007,9 @@ if food:
 else:
     read tail from body
     erase tail
-    advance tail index</pre></div></div></section>
+    advance tail index</pre></div></div>
+<div class="how"><h3>How it works in the code</h3><p>Snake is a single process loop that exercises the full stack in one program: <code>LOAD</code> at <code>0xF800</code> for keyboard input, indirect <code>STORE_AT</code> for drawing cells, <code>LOAD16_AT</code> / <code>STORE16_AT</code> for the body ring buffer starting at offset 32, <code>SYSCALL RANDOM</code> for food placement, and <code>MOD</code> for toroidal wrap in a 20-row sub-region starting at framebuffer row 5.</p>
+<p><code>/sbin/init</code> and <code>/bin/animate</code> never call <code>HALT</code> — they <code>JMP</code> in infinite loops. Among the five boot processes, only the sender calls <code>HALT()</code> after its IPC exchange.</p></div></section>
 <section id="flow"><h2>12. End-to-end flows</h2><div class="grid two"><div class="card"><span class="tag disk">Launching /games/snake</span><pre>path
  ↓
 filesystem.resolve()
@@ -852,8 +1069,10 @@ scheduler → process.exit()
 free code block
 clear private data
 remove IPC mailbox
-remove PCB</pre></div></div></section>
-<section id="limits"><h2>13. Deliberate simplifications</h2><p class="intro">This is a real model of kernel ideas, not a production OS. The simplifications are what keep the mechanisms visible.</p><div class="grid two"><div class="card"><span class="tag kernel">Scheduler</span><ul class="notes"><li>Round-robin pass over the process table.</li><li>Fixed 56-instruction slice.</li><li>No priorities, multicore, or sophisticated fairness.</li><li>Timer uses JavaScript <code>setInterval</code>, not a hardware interrupt controller.</li></ul></div><div class="card"><span class="tag data">Memory</span><ul class="notes"><li>No paging or MMU page tables.</li><li>Program code: variable first-fit blocks.</li><li>Private data: fixed 60 KiB slots.</li><li>Process-visible addresses are translated in software.</li></ul></div><div class="card"><span class="tag disk">Filesystem</span><ul class="notes"><li>JSON metadata in first 1024 disk bytes.</li><li>Contiguous files; no block allocation or fragmentation.</li><li>No permissions, timestamps, links, cache, or journal.</li><li>Runtime file support is deliberately minimal.</li></ul></div><div class="card"><span class="tag device">Devices</span><ul class="notes"><li>Text framebuffer, one byte per character.</li><li>Keyboard keeps only the latest key code.</li><li>Programs may directly access MMIO.</li><li>No privilege rings, DMA, or device discovery.</li></ul></div><div class="card"><span class="tag ipc">IPC</span><ul class="notes"><li>One mailbox per process.</li><li>Message = sender PID + one 16-bit value.</li><li>No named ports, capacity limits, permissions, or backpressure.</li><li>Demo sender assumes receiver is PID 4.</li></ul></div><div class="card"><span class="tag kernel">Host boundary</span><ul class="notes"><li>Node executes the JavaScript kernel implementation.</li><li>The simulated CPU executes only our user-program machine code.</li><li><code>screen.js</code> and <code>keyboard.js</code> bridge to real terminal I/O.</li><li>The 64 KiB kernel RAM region is conceptual rather than literal executable JS bytes.</li></ul></div></div><div class="callout"><strong>These simplifications do not remove the core relationships.</strong> Programs live on disk, files have names and directories, programs become processes in RAM, the scheduler shares CPU time, syscalls enter kernel services, MMIO connects software to devices, blocked tasks stop running, and IPC lets isolated processes communicate.</div></section>
+remove PCB</pre></div></div>
+<div class="how"><div class="callout"><strong>One 75 ms tick, end to end:</strong> <code>timer.js</code> fires → <code>scheduler.run()</code> snapshots <code>process.processes</code> → for each ready process, <code>cpu.run(process, 56)</code> executes up to 56 instructions → a syscall may block the process, wake another, or return values in registers → <code>HALT</code> triggers <code>process.exit()</code> → meanwhile <code>screen.js</code> may redraw the terminal independently at 30 FPS if the framebuffer changed.</div></div></section>
+<section id="limits"><h2>13. Deliberate simplifications</h2><p class="intro">This is a real model of kernel ideas, not a production OS. The simplifications are what keep the mechanisms visible.</p><div class="grid two"><div class="card"><span class="tag kernel">Scheduler</span><ul class="notes"><li>Round-robin pass over the process table.</li><li>Fixed 56-instruction slice.</li><li>No priorities, multicore, or sophisticated fairness.</li><li>Timer uses JavaScript <code>setInterval</code>, not a hardware interrupt controller.</li></ul></div><div class="card"><span class="tag data">Memory</span><ul class="notes"><li>No paging or MMU page tables.</li><li>Program code: variable first-fit blocks.</li><li>Private data: fixed 60 KiB slots.</li><li>Process-visible addresses are translated in software.</li></ul></div><div class="card"><span class="tag disk">Filesystem</span><ul class="notes"><li>JSON metadata in first 1024 disk bytes.</li><li>Contiguous files; no block allocation or fragmentation.</li><li>No permissions, timestamps, links, cache, or journal.</li><li>Runtime file support is deliberately minimal.</li></ul></div><div class="card"><span class="tag device">Devices</span><ul class="notes"><li>Text framebuffer, one byte per character.</li><li>Keyboard keeps only the latest key code.</li><li>Programs may directly access MMIO.</li><li>No privilege rings, DMA, or device discovery.</li></ul></div><div class="card"><span class="tag ipc">IPC</span><ul class="notes"><li>One mailbox per process.</li><li>Message = sender PID + one 16-bit value.</li><li>No named ports, capacity limits, permissions, or backpressure.</li><li>Demo sender assumes receiver is PID 4.</li></ul></div><div class="card"><span class="tag kernel">Host boundary</span><ul class="notes"><li>Node executes the JavaScript kernel implementation.</li><li>The simulated CPU executes only our user-program machine code.</li><li><code>screen.js</code> and <code>keyboard.js</code> bridge to real terminal I/O.</li><li>The 64 KiB kernel RAM region is conceptual rather than literal executable JS bytes.</li></ul></div></div><div class="callout"><strong>These simplifications do not remove the core relationships.</strong> Programs live on disk, files have names and directories, programs become processes in RAM, the scheduler shares CPU time, syscalls enter kernel services, MMIO connects software to devices, blocked tasks stop running, and IPC lets isolated processes communicate.</div>
+<div class="how"><h3>Implementation details worth knowing</h3><ul class="notes"><li>The first 64 KiB kernel RAM region is documented but unused — the JavaScript kernel does not occupy simulated RAM.</li><li>Maximum about <strong>8 concurrent processes</strong> due to fixed data slot count; no dynamic slot growth.</li><li>Program instruction fetch bypasses address translation — only LOAD/STORE use <code>readProcess</code> / <code>writeProcess</code>.</li><li>Scheduling is cooperative within a tick: all ready processes each get 56 instructions per 75 ms tick, not strict one-at-a-time round-robin.</li><li>The disk image is static at startup — programs are embedded in <code>disk.js</code> when the module loads.</li></ul></div></section>
 <section><h2>14. The whole kernel in one diagram</h2><pre>                              ┌──────────────────────────────┐
                               │          REAL MACHINE         │
                               │ Linux terminal + Node.js      │
@@ -887,8 +1106,11 @@ remove PCB</pre></div></div></section>
 │  │      1 MiB DISK     │                       │          1 MiB RAM          │   │        │
 │  │ file table+programs │                       │ kernel/programs/data/MMIO  │   │        │
 │  └─────────────────────┘                       └─────────────────────────────┘   │        │
-└─────────────────────────────────────────────────────────────────────────────────────────┘</pre></section>
-<section><h2>15. What this kernel teaches</h2><p class="intro">Once a machine has a CPU, memory, storage, devices, and multiple programs, the core OS problems naturally appear. This project derives the major mechanisms directly from those problems instead of starting from textbook names.</p><div class="grid four"><div class="card"><strong>Execution</strong><p>Programs become processes with PID, registers, instruction pointer, and memory.</p></div><div class="card"><strong>Sharing</strong><p>The scheduler divides CPU execution among ready processes.</p></div><div class="card"><strong>Isolation</strong><p>Each process receives private data memory.</p></div><div class="card"><strong>Services</strong><p>Syscalls cross from programs into kernel-owned functionality.</p></div><div class="card"><strong>Persistence</strong><p>The filesystem gives raw disk bytes names and hierarchy.</p></div><div class="card"><strong>I/O</strong><p>MMIO connects programs to keyboard and framebuffer.</p></div><div class="card"><strong>Waiting</strong><p>Blocked processes stop consuming CPU until woken.</p></div><div class="card"><strong>Communication</strong><p>IPC lets isolated processes exchange messages through the kernel.</p></div></div></section>
+└─────────────────────────────────────────────────────────────────────────────────────────┘</pre>
+<div class="how"><p>Every box in the diagram maps to a real module: <code>keyboard.js</code> feeds <code>0xF800</code>, <code>screen.js</code> reads the physical framebuffer, <code>filesystem.js</code> resolves paths against the disk file table, <code>process.js</code> holds the process table, <code>scheduler.js</code> and <code>timer.js</code> drive execution, <code>cpu.js</code> runs instructions, <code>memory.js</code> owns the RAM array, <code>syscall.js</code> and <code>ipc.js</code> handle kernel services, and <code>disk.js</code> is both the simulated disk and the program authoring surface.</p></div></section>
+<section><h2>15. What this kernel teaches</h2><p class="intro">Once a machine has a CPU, memory, storage, devices, and multiple programs, the core OS problems naturally appear. This project derives the major mechanisms directly from those problems instead of starting from textbook names.</p><div class="grid four"><div class="card"><strong>Execution</strong><p>Programs become processes with PID, registers, instruction pointer, and memory.</p></div><div class="card"><strong>Sharing</strong><p>The scheduler divides CPU execution among ready processes.</p></div><div class="card"><strong>Isolation</strong><p>Each process receives private data memory.</p></div><div class="card"><strong>Services</strong><p>Syscalls cross from programs into kernel-owned functionality.</p></div><div class="card"><strong>Persistence</strong><p>The filesystem gives raw disk bytes names and hierarchy.</p></div><div class="card"><strong>I/O</strong><p>MMIO connects programs to keyboard and framebuffer.</p></div><div class="card"><strong>Waiting</strong><p>Blocked processes stop consuming CPU until woken.</p></div><div class="card"><strong>Communication</strong><p>IPC lets isolated processes exchange messages through the kernel.</p></div></div>
+<div class="how"><h3>How to run and read the code</h3><p>From the project root, run <code>node main.js</code>. Trace boot from <code>main.js</code> → <code>kernel.run()</code> → spawn chain → first <code>scheduler.run()</code> tick.</p>
+<p>To follow one instruction: set a breakpoint or log in <code>cpu.run</code> at the fetch line — watch <code>programStart + instructionPointer</code> read from physical RAM. To follow one memory access: trace <code>readProcess</code> in <code>memory.js</code> and see whether the address routes to keyboard, framebuffer, or private data.</p></div></section>
 <footer class="footer"><strong>Tiny JavaScript Kernel — Architecture & Internals</strong><br>One-file documentation designed to make the machine visible: bytes on disk, bytes in RAM, CPU execution, process state, scheduling, syscalls, devices, and IPC.</footer>
 </div>
 </body>
